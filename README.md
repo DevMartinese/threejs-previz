@@ -41,7 +41,9 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │   ├── index.jsx            registerRoot
 │   ├── Root.jsx             one <Composition> per scene, all metadata derived
 │   └── scenes/
-│       ├── roundtable.js    the flagship: 6 characters, 4 cuts, handheld
+│       ├── roundtable.js    6 characters, 4 cuts, target handoffs, handheld
+│       ├── canspot.js       13-cut product piece: CSG slices, clone
+│       │                    choreography, object animation, 16 audited entries
 │       └── demo.js          the smallest complete scene (2 characters, 2 shots)
 ├── docs/                    the method, written up
 └── skills/                  the same material packaged as Claude skills
@@ -74,8 +76,15 @@ real scene rather than a stub.
 - **Everything is scoped to a context.** `createBlocking()` returns `ctx` with
   its own scene, groups, camera and palette — no module state, so the gate, a
   film, or a Remotion worker can build many scenes in one process.
-- **Build once per worker, move only the camera.** `def.make()` runs in a
-  `useMemo`; CSG and BVH are build-time work.
+- **Build once per worker, move only the camera — and the poses.** `def.make()`
+  runs in a `useMemo`; CSG and BVH are build-time work. Objects that move do it
+  through `defineScene({ animate })`: a pure function `({ ctx, frame }) => …`
+  that poses everything from scratch each frame — the audit gate runs it at
+  every sampled frame, so the audits measure the scene exactly as it renders.
+- **Declare a hero per shot; `hero: []` marks a transitional entry.** A can
+  erupting through the bottom of frame, a close travel along a product, a
+  fly-through — nothing whole stays in frame there *by design*. Framing is
+  waived for that entry; collisions and floor still run.
 
 ## A scene, end to end
 
@@ -148,6 +157,11 @@ them:
   because in headless Node nothing else ever computes a rig pivot's world
   matrix. Plain `updateMatrixWorld(true)` measured every rigged mesh at the
   origin.
+- **R3F's `<primitive>` reparents what it mounts.** `<PrevizStage>` used to
+  mount the five groups one primitive each, which silently emptied `ctx.scene`
+  in the browser — every `ctx.get()` after mount searched a hollow scene, while
+  the Node-side audit (no R3F) kept passing. It now mounts `ctx.scene` whole.
+  If you write a custom stage, mount the scene, never the groups.
 - `Config.setChromiumOpenGlRenderer('angle')` is set in `remotion.config.ts`;
   without it some machines render black.
 - `film.jsx` (multi-scene stitch/live) is present but has not been exercised
