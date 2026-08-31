@@ -154,6 +154,9 @@ export default defineScene({
     // that is geometry, not a mistake.
     { name: 'SC01_orbit', from: 0, to: 360, focalLength: 24, easing: 'linear',
       hero: 'PRP_table_top',
+      // "We only pass behind red at the start and cyan in the middle" — the
+      // orbit eclipsing the table behind the cast is the shot, declared.
+      occlusion: { ignore: ['CHR_*', 'PRP_chair_*'] },
       // radius/height tuned against the audit, twice: at r 2.7 the table left
       // frame by 0.752 @f144, and at r 3.4 still by 0.414 — because the hero
       // was the WHOLE table, pedestal base included, and no orbit that looks

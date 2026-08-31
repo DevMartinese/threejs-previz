@@ -223,7 +223,10 @@ function animate({ ctx, frame }) {
     const can = show('PRP_can', [0, HOVER, 0]);
     can.rotation.y = rad(0.25) * f;
     CLONES.forEach((c, i) => {
-      const out = ramp(f, 10 + i * 12, 22, easings.easeOutCubic);
+      // ease IN-out: easeOutCubic's first visible frame was already 13% of
+      // the way out — the continuity audit reads that as popping into view
+      // beside the can instead of emerging from inside it.
+      const out = ramp(f, 10 + i * 12, 22, easings.easeInOutCubic);
       const back = ramp(f, 70 + i * 8, 14, easings.easeInOutCubic);
       const k = out * (1 - back);
       if (k <= 0) return;
@@ -300,7 +303,7 @@ function animate({ ctx, frame }) {
     const can = show('PRP_can', [0, canY, 0]);
     can.rotation.y = rad(3) * f;
     CLONES.forEach((c, i) => {
-      const bloom = ramp(f, 8 + i * 7, 16, easings.easeOutCubic);
+      const bloom = ramp(f, 8 + i * 7, 16, easings.easeInOutCubic);
       if (bloom <= 0) return;
       // Born inside the rising can, blooming out of it radially — same
       // emergence contract as the fan cut.
@@ -348,10 +351,13 @@ export default defineScene({
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.2, target: [0, 0.18, 0] }), 0.4, 1) },
 
     // 2 — spiral up around the can from the water (turntable = orbit + rise).
+    // phiLow was -2°, which put the camera 7 mm UNDER the water plane at the
+    // start — the occlusion audit reported the water blocking 100% of the
+    // hero, which is what an underwater camera looking up at a disc sees.
     { name: 'SC02_spiral', from: 150, to: 225, focalLength: 40, easing: 'linear',
       hero: 'PRP_can',
       move: moves.turntable({ radius: 0.46, pushIn: 0.95, arc: rad(300),
-                              phiLow: rad(-2), phiHigh: rad(22), target: [0, 0.19, 0] }) },
+                              phiLow: rad(2), phiHigh: rad(22), target: [0, 0.19, 0] }) },
 
     // 3 — hold at the lid, then travel down along the can. The lid is the
     // hold's hero; the travel is transitional — a close travel along a
@@ -366,9 +372,10 @@ export default defineScene({
         { targets: [[0, 0.25, 0], [0, 0.14, 0]] }) },
 
     // 4 — wide arc; the five clones fan out from behind, one by one, and are
-    // sucked back in.
+    // sucked back in. Clones wrapping/crossing the mother can is the shot:
+    // declared for occlusion just like it is for collisions.
     { name: 'SC04_fan', from: 300, to: 420, focalLength: 35, easing: 'linear',
-      hero: 'PRP_can',
+      hero: 'PRP_can', occlusion: { ignore: ['PRP_clone_*'] },
       move: moves.orbit360({ radius: 0.7, height: 0.3, startAngle: rad(-60),
                              arc: rad(120), target: [0, 0.14, 0] }) },
 
@@ -423,7 +430,7 @@ export default defineScene({
     // 12 — the reveal: the can lifts and spins, clones bloom one by one, the
     // camera slowly circles.
     { name: 'SC12_reveal', from: 810, to: 860, focalLength: 40, easing: 'linear',
-      hero: 'PRP_can',
+      hero: 'PRP_can', occlusion: { ignore: ['PRP_clone_*'] },
       move: moves.orbit360({ radius: 0.55, height: 0.22, startAngle: rad(20),
                              arc: rad(70), target: [0, 0.185, 0] }) },
 

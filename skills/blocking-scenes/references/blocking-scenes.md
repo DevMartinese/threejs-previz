@@ -1,7 +1,7 @@
 # Blocking Scenes — method
 
 How to build a blocking pass in Three.js: what it is for, the conventions that
-make it readable, the CSG rules that decide whether a cut works, the three audits
+make it readable, the CSG rules that decide whether a cut works, the audits
 that replace eyeballing, and the determinism contract that lets Remotion render it.
 
 ## Table of contents
@@ -12,7 +12,7 @@ that replace eyeballing, and the determinism contract that lets Remotion render 
 4. [Stages, and a backup per stage](#4-stages)
 5. [The primitive vocabulary](#5-the-primitive-vocabulary)
 6. [CSG: making the cuts work](#6-csg)
-7. [The three audits](#7-the-three-audits)
+7. [The audits](#7-the-audits)
 8. [Camera: use the moves catalog](#8-camera-use-the-moves-catalog)
 9. [Determinism: the Remotion contract](#9-determinism)
 10. [Worked example](#10-worked-example)
@@ -154,7 +154,7 @@ Practical rules:
   thickness pokes through the wall. See the worked example — the audit catches it,
   but knowing the failure mode saves a round trip.
 
-## 7. The three audits
+## 7. The audits
 
 Blocking is validated by measuring. Each audit catches a class of error that looks
 fine in a still and is obvious — too late — in motion.
@@ -164,9 +164,11 @@ fine in a still and is obvious — too late — in motion.
 Which meshes actually interpenetrate. Broad-phase on world AABBs, then exact
 triangle-level through `three-mesh-bvh`. Returns `[{ a, b }]` by name.
 
-Catches: a camera path through a solid, a prop inside the hero, a layer poking
-through a wall. `stack` tags its layers so neighbours touching by design are not
-reported; pass `ignore: [['A','B']]` for other intentional contacts.
+Catches: a prop inside the hero, a layer poking through a wall, two characters
+interpenetrating. `stack` tags its layers so neighbours touching by design are
+not reported; pass `ignore: [['A','B']]` for other intentional contacts. (A
+camera path through a solid is the *clearance* audit's job, below — the camera
+is not a mesh.)
 
 ### `auditFraming(meshes, camera)`
 
@@ -181,11 +183,72 @@ The usual fix is to scale the camera path away from its target — the move is
 preserved and only the air around the subject changes. Tightening the lens instead
 changes the perspective, which changes the shot.
 
-### `auditFloor(meshes, { y })`
+### `auditFloor(meshes, { y, ignore })`
 
 The lowest point in the scene. Catches things sinking through the ground plane —
 which happens constantly the moment anything rotates about a pivot that is not at
-its base.
+its base. A breach that is *meant* (a ball plunging into the water) is declared:
+`floorIgnore: ['PRP_ball']` on the scene — documented, not silenced by moving
+the plane.
+
+### `auditOcclusion(hero, blockers, camera)` — can you SEE it?
+
+Framing proves the hero is inside the frame; occlusion proves the camera can
+actually see it. Five sightline raycasts (BVH-exact) from the camera to the
+hero's centre, top, bottom and sides; anything opaque that intercepts one
+counts. Translucent materials (`transparent` with opacity < 0.5) never block.
+
+Catches the failure no bbox audit can: the over-the-shoulder that is actually
+*through the head* — the hero perfectly in frame and completely invisible.
+Measured on the two-seat demo scene: the OTS placed dead on the green–red axis
+reported `occlusion 1.00 of CHR_red_head <CHR_green_head>`; moving the camera
+half a metre off-axis made it a real shoulder.
+
+Intent is declared per shot: `occlusion: { ignore: ['PRP_ice_*'] }` for things
+scripted to cross in front (floating ice, a cast the orbit eclipses), a number
+to change the allowed fraction (default 0.2), or `occlusion: false`. Runs only
+on shots with a declared hero.
+
+### `auditCameraClearance(meshes, camera, { min })` — is the camera somewhere legal?
+
+Exact BVH closest-point distance from the camera to every visible mesh,
+scenery included — not bounding boxes, so a camera deliberately inside a room
+or a drinking glass measures its distance to the *walls*. Anything closer than
+the near plane (the default `min`) clips a hole through the object on screen.
+"The camera flies between the cans touching nothing" is a measurement:
+`camera 0.0181 ≥ 0.0075` — not a promise. Override per shot: `clearance: 0.05`.
+
+### Continuity — nothing pops, nothing teleports (on screen)
+
+The one class of error sampling can never see, because it lives *between*
+frames — so `auditShots` sweeps every frame of every shot (visibility and
+position only; it stays cheap) and escalates only suspicious frames to the
+frustum and sightline checks. Flagged: an object that appears or vanishes
+while on screen and unoccluded, and a position step wildly larger than its
+neighbours while visible.
+
+Automatically legitimate, no declaration needed:
+
+- entering or leaving **outside the frustum** (walking in from off-screen);
+- appearing or vanishing **while occluded** — a clone emerging from inside
+  the hero can, a ball sinking under the water plane, an actor stepping out
+  from behind a wall;
+- a **swap**: one mesh replaced by others in the same place on the same frame
+  (the can swapped for its CSG slices at the freeze) — overlapping boxes
+  excuse each other, and children whose visibility flips with an ancestor's
+  (a lid on a can) follow the ancestor's judgement;
+- anything across a cut — shots own their own frames.
+
+Everything else is a finding, named by object and frame. Escape hatch, per
+shot: `pops: ['PRP_debris_*']`. This is the audit that encodes "the clones
+come out of the can — they don't spawn beside it": born at the can's own
+position they emerge occluded and pass; born next to it they pop and fail.
+
+### The timeline has no gaps
+
+`shotList` throws if any frame has no owning shot — a frame in a gap silently
+resolves to the wrong camera at render time. An editorial gap is a shot too:
+declare an explicit placeholder (`hero: []`, camera on empty stage).
 
 ### Subjects vs scenery
 
@@ -228,7 +291,7 @@ framing, the worst floor breach and every collision pair with the frame it
 happened on. A real run on the round-table scene: collisions clean, floor clean,
 and `CHR_green` leaving frame at f90 — one actionable line out of a scene that
 looked fine while authoring. This is the
-pre-render checklist: **all three clean before you spend a render.**
+pre-render checklist: **everything clean before you spend a render.**
 
 Shot ranges are half-open — `{ from: 0, to: 60 }` owns frames 0–59 and frame 60
 belongs to the next shot. Sampling the boundary frame would measure the *next*

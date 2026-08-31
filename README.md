@@ -17,7 +17,7 @@ handheld — authored entirely in code, gated by audits, rendered end to end.
 
 ```bash
 npm install
-npm run audit     # the gate: collisions / framing / floor, headless, ~30 ms
+npm run audit     # the gate: six checks per shot, headless, ~150 ms for 900 frames
 npm run render    # audit && render the 30 s roundtable scene to out/
 npm run studio    # scrub the timeline in Remotion Studio
 ```
@@ -67,12 +67,30 @@ real scene rather than a stub.
 - **Pure function of the frame.** No clocks, no `useFrame`, no
   `Math.random()` (there is a seeded `rng`). Remotion renders frames out of
   order across workers; anything with its own state flickers.
-- **Measure, don't eyeball.** Collisions via BVH, framing via NDC projection,
-  floor via bounding boxes. Every shot declares its `hero` — what must stay in
-  frame. `hero: []` marks a transitional shot: framing waived, collisions and
-  floor still audited.
-- **Audit subjects, not scenery.** `ENV` is excluded; intentional contact is
-  declared, with wildcards: `ignore: [['PRP_chair_*', 'CHR_*']]`.
+- **Measure, don't eyeball.** Six checks per shot, all headless:
+  1. **Collisions** — triangle-exact via BVH, on subjects.
+  2. **Framing** — the shot's `hero` projected to NDC; is it inside the frame?
+  3. **Floor** — nothing sinks through the ground plane.
+  4. **Occlusion** — sightline raycasts from the camera to the hero: being in
+     frame is not the same as being *visible*. "Nobody blocks cyan at the
+     end" is a measurement, not a hope. Translucent materials don't block.
+  5. **Camera clearance** — exact BVH distance from the camera to everything
+     visible; closer than the near plane clips a hole through geometry.
+  6. **Continuity** — a full-frame-rate sweep: nothing pops into or out of
+     existence *on screen*, nothing teleports. Entering from off-screen,
+     emerging from behind something, sinking into water, and same-place swaps
+     (a can replaced by its CSG slices) are automatically legitimate.
+
+  Every shot declares its `hero` — what must stay in frame. `hero: []` marks a
+  transitional shot: framing and occlusion waived, everything else still runs.
+- **Audit subjects, not scenery — and declare intent, don't silence checks.**
+  `ENV` is excluded from collisions; everything intentional is declared with
+  wildcards, per class: contact `ignore: [['PRP_chair_*', 'CHR_*']]`, floor
+  breaches `floorIgnore: ['PRP_ball']`, intentional blockers per shot
+  `occlusion: { ignore: ['PRP_ice_*'] }` (or `occlusion: false`), sanctioned
+  pops per shot `pops: ['PRP_debris_*']`, camera margin `clearance: 0.05`.
+- **The timeline has no gaps.** `shotList` throws if a frame has no owner —
+  an editorial gap is declared as an explicit placeholder shot.
 - **Everything is scoped to a context.** `createBlocking()` returns `ctx` with
   its own scene, groups, camera and palette — no module state, so the gate, a
   film, or a Remotion worker can build many scenes in one process.

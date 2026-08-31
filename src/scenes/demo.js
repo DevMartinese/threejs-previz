@@ -68,6 +68,9 @@ export default defineScene({
       name: 'SC01_wide', from: 0, to: 120,
       focalLength: 32, easing: 'easeInOutSine',
       hero: 'PRP_table',
+      // Passing behind the cast eclipses the table — that's what a close
+      // orbit does, so the cast is declared as intentional blockers.
+      occlusion: { ignore: ['CHR_*', 'PRP_chair_*'] },
       // reframe adds `center` to BOTH position and target, so the move's own
       // target is zeroed — otherwise turntable's default [0,1,0] leaks in.
       move: reframe(
@@ -78,14 +81,18 @@ export default defineScene({
 
     // SC02: over green's shoulder, pushing in on red. Hero is red's head — the
     // rest of the cast is supposed to leave frame here.
+    // The camera sits off-axis (x 0.5): dead on the green-red axis the shot
+    // was "through the head", not "over the shoulder" — green's head blocked
+    // 100% of red's, and the occlusion audit caught what the framing audit
+    // (red's head was perfectly in frame, just invisible) never could.
     {
       name: 'SC02_ots', from: 120, to: 180,
       focalLength: 58, easing: 'easeOutCubic',
       hero: 'CHR_red_head',
       move: handheld(
         reframe(
-          moves.pushIn({ from: 2.6, to: 1.9, height: 0.25, target: [0, 0, 0] }),
-          { center: [0, 1.05, 0.2] },
+          moves.pushIn({ from: 2.6, to: 1.9, height: 0.25, target: [-0.5, 0.1, -1.3] }),
+          { center: [0.5, 1.05, 0.2] },
         ),
         { posAmp: 0.012, freq: 2.0 },
       ),

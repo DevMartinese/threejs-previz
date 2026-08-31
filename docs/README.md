@@ -8,7 +8,8 @@ reading outside Claude.
 - `lens-and-framing.md` — physical camera parameters in Three: focal length, film
   gauge, lens shift, near/far, depth of field, and matching a DCC camera exactly.
 - `blocking-scenes.md` — the method: identity colour, naming, stages, CSG rules,
-  the three audits and what each catches, determinism.
+  the audits (collisions, framing, floor, occlusion, camera clearance,
+  continuity) and what each catches, determinism.
 - `geometry-vocabulary.md` — choosing a construction, with a shape → helper table.
 - `remotion-pipeline.md` — project layout, render-time determinism, the audit
   gate, films, render commands, failure modes.
