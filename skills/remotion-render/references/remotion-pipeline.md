@@ -31,6 +31,8 @@ project/
 │   ├── shots.js                the timeline
 │   ├── scene.js                defineScene — plain JS, Node can load it
 │   ├── remotion.jsx            sceneComponent + <PrevizStage>
+│   ├── film.js                 defineFilm — plain JS, Node can load it
+│   ├── film.jsx                filmComposition (the React half)
 │   └── auditScenes.mjs         the gate
 ├── src/
 │   ├── Root.tsx                registers the compositions
@@ -173,16 +175,31 @@ it without opening the Studio.
 A scene is a unit of work; a film is an edit of scenes. They are separate
 compositions so that changing one scene does not invalidate the rest.
 
+The same split as scenes: `film.js` is the definition (plain JS — the audit
+gate loads it and runs the cross-scene checks), `film.jsx` binds the component.
+
 ```js
-// src/film.js
+// src/film.js — plain JS, Node loads it
+import { defineFilm } from '../lib/film.js';
 export default defineFilm({
   id: 'feature',
   scenes: [intro, roundtable, outro],
   mode: 'stitch',
-  transitions: { intro: { frames: 15, presentation: fade() } },
-  TransitionSeries,                 // from @remotion/transitions
+  transitions: { intro: { frames: 15 } },
 });
 ```
+
+```jsx
+// src/Root.jsx — inject the transition kit; lib/ never hard-depends on it
+import { TransitionSeries, linearTiming } from '@remotion/transitions';
+import { fade } from '@remotion/transitions/fade';
+import { filmComposition } from '../lib/film.jsx';
+<Composition {...filmComposition(feature, { TransitionSeries, linearTiming, presentation: fade() })} />
+```
+
+Declaring transitions and not injecting the kit **throws at registration** —
+a silently ignored dissolve is how a film comes out the wrong length.
+(Composition ids allow only `a-z A-Z 0-9 -`; no underscores.)
 
 ### stitch vs live
 
@@ -237,9 +254,10 @@ FAIL  feature  (515 frames)
   FAIL table: fps 24 != film fps 30 — timing will drift
   FAIL outro: 1920x1080 != film 2520x1080 — will letterbox or crop
   FAIL transition after "table": 60 frames is >= the shortest adjacent scene (20)
-  FAIL transition after "intro": pass TransitionSeries from @remotion/transitions,
-       or it will be ignored
 ```
+
+(A declared transition with no injected `TransitionSeries`/`linearTiming` is
+not a check — `filmComposition` throws at registration.)
 
 **Mismatched fps is the worst of them.** A stitched film plays every clip at the
 film's fps, so a 24 fps scene inside a 30 fps film runs fast *and* every cut after

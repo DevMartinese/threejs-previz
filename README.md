@@ -35,7 +35,8 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │   ├── shots.js             the TIMELINE: frame -> shot -> u -> camera
 │   ├── scene.js             the DEFINITION: defineScene — plain JS, Node loads it
 │   ├── remotion.jsx         the COMPONENT:  sceneComposition -> <Composition>
-│   ├── film.jsx             the EDIT:       defineFilm joins scenes
+│   ├── film.js              the EDIT:       defineFilm — plain JS, Node loads it
+│   ├── film.jsx             the EDIT's COMPONENT: filmComposition (live/stitch)
 │   └── auditScenes.mjs      the GATE:       exits non-zero if a shot fails
 ├── src/
 │   ├── index.jsx            registerRoot
@@ -182,5 +183,10 @@ them:
   If you write a custom stage, mount the scene, never the groups.
 - `Config.setChromiumOpenGlRenderer('angle')` is set in `remotion.config.ts`;
   without it some machines render black.
-- `film.jsx` (multi-scene stitch/live) is present but has not been exercised
-  end to end yet.
+- Films are verified in **both modes**: `npm run render:film` (live — two
+  `<ThreeCanvas>` scenes through a real TransitionSeries dissolve) and
+  `npm run render:film:stitch` (scenes pre-rendered to `public/`, stitched via
+  `<OffthreadVideo>`); the two dissolve frames match pixel for pixel. The film
+  definition lives in plain-JS `film.js` so the gate audits the real file, and
+  `filmComposition` throws if transitions are declared without injecting
+  `TransitionSeries`/`linearTiming`. Composition ids allow no underscores.

@@ -34,7 +34,8 @@ math so you can tune or extend them.
 14. [Whip Pan](#14-whip-pan)
 15. [Tracking / Follow](#15-tracking)
 16. [Dutch Angle / Roll](#16-dutch-angle)
-17. [Cinema Studio: genre & speedramp mapping](#17-cinema-studio-mapping)
+17. [Truck / Crawl + modifiers](#17-truck--crawl)
+18. [Cinema Studio: genre & speedramp mapping](#18-cinema-studio-mapping)
 
 Angles use `θ` for azimuth (around world Y) and `φ` for elevation.
 `lerp(a,b,u) = a + (b-a)*u`.
@@ -247,6 +248,38 @@ state.roll += lerp(0, maxRoll, u)     // or hold a constant roll for the shot
 ```
 - **Duration/easing:** match the base move.
 
+## 17. Truck / Crawl
+A straight slide between two points, look held on a target — the
+over-the-shoulder that "barely crawls sideways", the low fly-through, the
+static hold (`from === to`).
+
+```js
+moves.truck({ from: [-1, 1.5, 6], to: [1, 1.5, 6], target: [0, 1, 0] })
+```
+- **Duration/easing:** usually `linear` — a crawl reads as operator patience,
+  and easing it makes the cut boundaries visible.
+
+### Modifiers: `retarget`, `drift`, `slice`
+
+**`retarget(move, { targets, easing })`** hands the gaze off along waypoints —
+the orbit whose look passes face to face across a table. Eases within each leg,
+so it slows on every waypoint without ever stopping. Repeat the last waypoint
+to end on a hold: `targets: [purpleHead, cyanHead, cyanHead]` slides then holds.
+
+**`drift(move, { duration, amp, freq, breathe })`** is slow noise + breathing on
+the TARGET — the operator's *attention*, where `handheld` is the operator's
+*body*. Layer both for real handheld: lazy sway (`handheld`, ~0.2 Hz) + a
+millimetre tremor (`handheld`, ~1.5 Hz) + target drift (`drift`).
+
+**`slice(move, from, to)`** plays only a window of a move. This is how several
+shot entries share ONE continuous move — a crawl whose framing hero changes
+mid-cut — without restarting its noise or easing at every entry boundary:
+
+```js
+const whole = handheld(drift(base, ...), ...);      // one time base
+slice(whole, 0, 1/3)   slice(whole, 1/3, 2/3)   slice(whole, 2/3, 1)
+```
+
 ### `reframe` and the move's own target
 
 `reframe(move, { center, scale })` offsets the **whole state** — position *and*
@@ -269,7 +302,7 @@ mistake for a composition choice, and caught immediately by a framing audit.
 
 ---
 
-## 17. Cinema Studio mapping
+## 18. Cinema Studio mapping
 
 The Higgsfield Cinema Studio parameters map cleanly onto this system, which is
 useful when the user asks for a *look* rather than a named move.

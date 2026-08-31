@@ -1,55 +1,25 @@
 /**
- * film.jsx — compose several scenes into one longer piece.
+ * film.jsx — the React half: render a film definition as a composition.
  *
- * A scene is a unit of work: you build it, audit it, render it, and stop thinking
- * about it. A film is an *edit* of scenes. Keeping the two separate is what lets
- * you change scene 3 without re-rendering the other five.
+ * Deliberately thin, same split as scene.js / remotion.jsx: `film.js` owns the
+ * definition (scenes, transitions, duration arithmetic, consistency checks)
+ * and stays loadable by the Node audit gate; this file owns the component.
  *
- * ---------------------------------------------------------------------------
- * TWO MODES, and the choice matters more than it looks
+ *   // src/Root.jsx
+ *   import { TransitionSeries, linearTiming } from '@remotion/transitions';
+ *   import { fade } from '@remotion/transitions/fade';
+ *   import { filmComposition } from '../lib/film.jsx';
+ *   import feature from './film.js';
  *
- *   'stitch'  (default) — each scene has already been rendered to a video file;
- *              the film references them with <OffthreadVideo>. Change one scene,
- *              re-render only that scene, re-stitch in seconds. This is how a real
- *              edit works: you cut negatives that are already developed.
+ *   <Composition {...filmComposition(feature, {
+ *     TransitionSeries, linearTiming, presentation: fade(),
+ *   })} />
  *
- *   'live'    — the film mounts each scene's React component inside a Sequence and
- *              renders everything in one pass. No intermediate files, but every
- *              scene rebuilds its geometry, a WebGL context is mounted and torn
- *              down per scene, and any change re-renders the whole film.
- *              Fine for two or three short scenes; painful past that.
- *
- * Start in 'live' while the piece is short and you are still moving cuts around.
- * Switch to 'stitch' once scenes stabilise and the render starts to hurt.
- *
- * ---------------------------------------------------------------------------
- * DURATION IS DERIVED, INCLUDING THE TRANSITION ARITHMETIC
- *
- * `<TransitionSeries>` renders both scenes during a transition and **shortens the
- * total by the transition length**. Two 100-frame scenes with a 30-frame
- * transition make a 170-frame film, not 200 and not 230. That subtraction is the
- * single most common off-by-N in a Remotion edit, so `defineFilm` does it.
- *
- * ---------------------------------------------------------------------------
- * USAGE
- *
- *   import { defineFilm } from '../../lib/film.jsx';
- *   import intro from './scenes/intro.js';
- *   import table from './scenes/roundtable.js';
- *
- *   export default defineFilm({
- *     id: 'feature',
- *     scenes: [intro, table],
- *     mode: 'stitch',
- *     transitions: { intro: { frames: 15 } },   // 15-frame dissolve after `intro`
- *   });
- *
- *   // Root.tsx — scenes stay individually renderable
- *   <>
- *     <Composition {...intro.compositionProps} />
- *     <Composition {...table.compositionProps} />
- *     <Composition {...feature.compositionProps} />
- *   </>
+ * `TransitionSeries` / `linearTiming` are injected rather than imported so a
+ * project with hard cuts only never needs @remotion/transitions installed.
+ * Declaring transitions in the film and NOT injecting them here throws loudly
+ * at registration — a silently-ignored dissolve is how films come out the
+ * wrong length.
  */
 
 import React from 'react';
@@ -57,47 +27,29 @@ import { AbsoluteFill, OffthreadVideo, Series, staticFile } from 'remotion';
 import { sceneComponent } from './remotion.jsx';
 
 /**
- * Compose scenes into a film.
+ * The React component for a film definition from `defineFilm()`.
  *
- * `scenes` are `defineScene()` results. `transitions` is keyed by the id of the
- * scene the transition comes **after**: `{ intro: { frames: 15, presentation } }`.
- * Omit it for hard cuts, which is usually what previz wants.
+ * 'live' mounts each scene's own component in sequence; 'stitch' references
+ * each scene's pre-rendered file in public/ via <OffthreadVideo> (override the
+ * naming with `src`).
  */
-export function defineFilm({
-  id,
-  scenes,
-  mode = 'stitch',
-  transitions = {},
+export function filmComponent(def, {
+  TransitionSeries = null,
+  linearTiming = null,
+  presentation = null,
   src = (scene) => staticFile(`${scene.id}.mp4`),
-  background = '#000000',
-  TransitionSeries = null,        // pass in from @remotion/transitions to use it
-  defaultPresentation = null,
-}) {
-  if (!scenes || !scenes.length) throw new Error(`film "${id}" has no scenes`);
-
-  const problems = check(scenes, transitions, mode, TransitionSeries);
-  const fps = scenes[0].fps;
-  const width = scenes[0].width;
-  const height = scenes[0].height;
-
-  const transitionFrames = scenes.reduce((sum, s, i) => {
-    const t = transitions[s.id];
-    return sum + (t && i < scenes.length - 1 ? t.frames : 0);
-  }, 0);
-  const sceneFrames = scenes.reduce((sum, s) => sum + s.list.duration, 0);
-  const durationInFrames = sceneFrames - transitionFrames;
-
-  function Component() {
-    const body = TransitionSeries && transitionFrames > 0
-      ? renderWithTransitions()
-      : renderSeries();
-    return <AbsoluteFill style={{ backgroundColor: background }}>{body}</AbsoluteFill>;
+} = {}) {
+  const hasTransitions = def.transitionFrames > 0;
+  if (hasTransitions && (!TransitionSeries || !linearTiming)) {
+    throw new Error(
+      `film "${def.id}" declares transitions — pass { TransitionSeries, linearTiming } `
+      + `from @remotion/transitions to filmComposition(), or they would be silently `
+      + `ignored and the film would render ${def.transitionFrames} frames short`);
   }
-  Component.displayName = `Film(${id})`;
 
   const liveComponents = new Map();
   function sceneBody(scene) {
-    if (mode === 'live') {
+    if (def.mode === 'live') {
       if (!liveComponents.has(scene.id)) liveComponents.set(scene.id, sceneComponent(scene));
       const C = liveComponents.get(scene.id);
       return <C />;
@@ -113,7 +65,7 @@ export function defineFilm({
   function renderSeries() {
     return (
       <Series>
-        {scenes.map((s) => (
+        {def.scenes.map((s) => (
           <Series.Sequence key={s.id} durationInFrames={s.list.duration} name={s.id}>
             {sceneBody(s)}
           </Series.Sequence>
@@ -124,21 +76,22 @@ export function defineFilm({
 
   function renderWithTransitions() {
     const out = [];
-    scenes.forEach((s, i) => {
+    def.scenes.forEach((s, i) => {
       out.push(
-        // NOTE: do not pass layout="none" here — it is deprecated and throws from
-        // Remotion 5. Transition scenes must stay absolutely positioned.
+        // NOTE: no layout="none" here — deprecated and throws from Remotion 5.
+        // Transition scenes must stay absolutely positioned. (The opposite of
+        // a plain <Sequence> inside a <ThreeCanvas>, which needs it.)
         <TransitionSeries.Sequence key={s.id} durationInFrames={s.list.duration} name={s.id}>
           {sceneBody(s)}
         </TransitionSeries.Sequence>,
       );
-      const t = transitions[s.id];
-      if (t && i < scenes.length - 1) {
+      const t = def.transitions[s.id];
+      if (t && i < def.scenes.length - 1) {
         out.push(
           <TransitionSeries.Transition
             key={`${s.id}->`}
-            presentation={t.presentation ?? defaultPresentation ?? undefined}
-            timing={t.timing}
+            presentation={t.presentation ?? presentation ?? undefined}
+            timing={t.timing ?? linearTiming({ durationInFrames: t.frames })}
           />,
         );
       }
@@ -146,75 +99,18 @@ export function defineFilm({
     return <TransitionSeries>{out}</TransitionSeries>;
   }
 
-  return {
-    id, fps, width, height, scenes, mode,
-    durationInFrames, sceneFrames, transitionFrames,
-    problems,
-    Component,
-    /** Re-run the consistency checks. Used by the audit gate. */
-    check: () => check(scenes, transitions, mode, TransitionSeries),
-    /** Where each scene starts on the film timeline (hard cuts only). */
-    timeline: scenes.reduce((acc, s) => {
-      const from = acc.length ? acc[acc.length - 1].to : 0;
-      acc.push({ id: s.id, from, to: from + s.list.duration });
-      return acc;
-    }, []),
-    compositionProps: {
-      id, component: Component, durationInFrames, fps, width, height,
-    },
-  };
+  function Component() {
+    return (
+      <AbsoluteFill style={{ backgroundColor: def.background }}>
+        {hasTransitions ? renderWithTransitions() : renderSeries()}
+      </AbsoluteFill>
+    );
+  }
+  Component.displayName = `Film(${def.id})`;
+  return Component;
 }
 
-/**
- * The checks that matter when joining scenes. All of these fail *silently* at
- * render time — the film comes out subtly wrong rather than erroring — which is
- * exactly why they are worth asserting up front.
- */
-function check(scenes, transitions, mode, TransitionSeries) {
-  const problems = [];
-  const { fps, width, height } = scenes[0];
-
-  for (const s of scenes) {
-    // Mismatched fps is the worst of these: the stitched film plays each clip at
-    // the film's fps, so a 24 fps scene inside a 30 fps film runs fast and every
-    // cut after it lands early.
-    if (s.fps !== fps) {
-      problems.push(`${s.id}: fps ${s.fps} != film fps ${fps} — timing will drift`);
-    }
-    if (s.width !== width || s.height !== height) {
-      problems.push(`${s.id}: ${s.width}x${s.height} != film ${width}x${height} — will letterbox or crop`);
-    }
-    if (!s.list.duration) {
-      problems.push(`${s.id}: zero-length shot list`);
-    }
-  }
-
-  for (const [after, t] of Object.entries(transitions)) {
-    const i = scenes.findIndex((s) => s.id === after);
-    if (i === -1) {
-      problems.push(`transition after "${after}": no such scene`);
-      continue;
-    }
-    if (i === scenes.length - 1) {
-      problems.push(`transition after "${after}": it is the last scene, transition ignored`);
-    }
-    const next = scenes[i + 1];
-    const shortest = Math.min(scenes[i].list.duration, next ? next.list.duration : Infinity);
-    if (t.frames >= shortest) {
-      problems.push(`transition after "${after}": ${t.frames} frames is >= the shortest adjacent scene (${shortest})`);
-    }
-    if (!TransitionSeries) {
-      problems.push(`transition after "${after}": pass TransitionSeries from @remotion/transitions, or it will be ignored`);
-    }
-  }
-
-  return problems;
-}
-
-/** Register scenes and films together; scenes stay individually renderable. */
-export function filmCompositions(film, Composition) {
-  return [
-    ...film.scenes.map((s) => <Composition key={s.id} {...s.compositionProps} />),
-    <Composition key={film.id} {...film.compositionProps} />,
-  ];
+/** Spread straight into `<Composition>`: metadata from film.js, component from here. */
+export function filmComposition(def, opts) {
+  return { ...def.compositionProps, component: filmComponent(def, opts) };
 }
