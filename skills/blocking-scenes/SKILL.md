@@ -7,8 +7,9 @@ description: >-
   with holes, swept tubes along curves, hollow walls, tapered layer stacks, taper
   / twist / bend / roughen deformers, radial-grid-scatter layout, instancing, and
   character / furniture proxies), boolean cuts and cross-sections with
-  three-bvh-csg, collision / framing / floor audits with three-mesh-bvh and NDC
-  projection, shot lists resolved per frame, and the determinism rules that let
+  three-bvh-csg, seven measured audits (collisions, framing, floor, hero occlusion, camera
+  clearance, on-screen continuity, declared attachments) with three-mesh-bvh,
+  NDC projection and sightline raycasts, shot lists resolved per frame, and the determinism rules that let
   the result be rendered by Remotion. Use this skill when the user wants to build
   an animatic, previz, blocking pass or motion reference in code; asks to cut,
   slice or cross-section a mesh with CSG; wants to check that objects don't
@@ -45,8 +46,8 @@ and timing — which is exactly what blocking pins down.
    wrong* output rather than an error, so skimming costs more than reading.
 
 2. **Import from `lib/blocking.js`.** Zero React, framework-agnostic. Scene
-   skeleton, identity palette, core primitives, CSG helpers, the three audits, and
-   scene-side visibility. Requires `three`, `three-mesh-bvh` and `three-bvh-csg`.
+   skeleton, identity palette, core primitives, CSG helpers, the audits, anchors
+   (`ctx.anchor`) and scene-side visibility. Requires `three`, `three-mesh-bvh` and `three-bvh-csg`.
 
 3. **Use `lib/geometry.js` for shapes — every shape lives there.** The vocabulary: sweeps along curves,
    extrusion with holes, hollow walls, deformers, layout distributions,
@@ -60,8 +61,15 @@ and timing — which is exactly what blocking pins down.
    Nothing in it reads a clock.
 
 5. **Build in stages and audit between them** — layout, props, cuts, camera,
-   polish. Run `auditShots(scene, camera, shots)` before spending a render:
-   collisions, framing overshoot and floor breaches, sampled across every shot.
+   polish. Run `auditShots(scene, camera, shots)` (or `defineScene().audit()`)
+   before spending a render. SEVEN checks per shot: collisions, framing, floor,
+   hero occlusion (being in frame is not being visible), camera clearance
+   (exact BVH distance vs the near plane), continuity (nothing pops or
+   teleports ON screen — a full-frame-rate sweep), and declared attachments
+   (a pour hangs from the mouth it pours from — measured). Declare intent,
+   never widen margins: `ignore` pairs, `floorIgnore`, per-shot
+   `occlusion: {ignore}` / `pops` / `clearance`, and `hero: []` for
+   transitional entries (framing+occlusion waived, everything else runs).
 
 6. **Wire the camera through `lib/shots.js`**, which consumes the moves
    catalog from `threejs-camera-moves`. Never re-implement a move here.
@@ -75,6 +83,15 @@ and timing — which is exactly what blocking pins down.
   own scene, groups, camera and palette — `ctx.part()`, `ctx.get()`,
   `ctx.subjects()`. No module-level state, so two scenes in one process (a film,
   the audit gate, a Remotion worker) never answer for each other.
+- **Objects move through `defineScene({ animate })`** — a pure function
+  `({ ctx, frame }) => …` that poses everything from scratch each frame; the
+  audit gate runs it at every sampled frame, so audits measure what renders.
+- **Connections come from anchors, then get declared.** `ctx.anchor(name,
+  localPoint)` is the world position of "the cup's mouth" through the scene
+  graph — author attachments from it, never from hand-typed trigonometry, and
+  declare them in `attachments:` so the audit measures the chain.
+- **Scenery stays Blender-grey.** The world carries no colour; every colour on
+  screen is an identity you can direct by.
 - **Colour is identity, not decoration.** A registered palette makes an untextured
   scene readable *and* gives you names to direct with — once the cast is red,
   green, blue and cyan, "cyan over blue's shoulder" is unambiguous.
@@ -138,17 +155,19 @@ Spatial relationships and timing, yes — block those. Surface and turbulence, n
   gotchas: lathe arc orientation, the tessellation requirement, and why full
   circles don't duplicate their endpoint. Has a table of contents.
 - `skills/blocking-scenes/references/blocking-scenes.md` — the method. Identity colour, naming, stages,
-  primitive vocabulary, CSG rules, the three audits and what each one catches, the
-  determinism contract, and a worked example with two real bugs the audits find.
+  primitive vocabulary, CSG rules, the audits and what each one catches, anchors and
+  attachments, the determinism contract, and a worked example with two real bugs the audits find.
   Has a table of contents.
 - `lib/blocking.js` — the scene context (`createBlocking` -> `ctx.part` / `ctx.parts`
-  / `ctx.get` / `ctx.subjects`), CSG cuts, and the three audits.
-  Formerly also held shapes;
-  `halve` / `bands` / `boolean`, `auditCollisions` / `auditFraming` / `auditFloor`
-  / `auditShots`, `shotList` / `applyFrame` / `applyVisibility`.
+  / `ctx.get` / `ctx.subjects` / `ctx.anchor`), CSG cuts (`halve` / `bands` /
+  `boolean`) and the audits (`auditCollisions` / `auditFraming` / `auditFloor` /
+  `auditOcclusion` / `auditCameraClearance`; `auditShots` in shots.js adds
+  continuity and attachments).
 - `lib/geometry.js` — the shape vocabulary: `curve` / `sweep` / `arcPath` /
   `alongCurve` / `helix`, `roundedRect` / `polygonShape` / `starShape` / `extrude` /
   `hole`, `wall` / `disc` / `gridBars`, `taper` / `twist` / `bend` / `roughen` /
   `lobed`, `radial` / `grid` / `scatter` / `place` / `instances`, `figure` /
-  `chair` / `table`, `merge` / `hull` / `fitTo` / `groundAtOrigin`.
+  `chair` / `table`, `capsule` / `roundedBox` / `gem`, `merge` / `hull` /
+  `fitTo` / `groundAtOrigin` — plus the full native three.js shelf documented
+  in the geometry reference (what each class is for, and what CSG can cut).
 - `lib/remotion.jsx` — `sceneComponent()`, `sceneComposition()`, `<PrevizStage>`.

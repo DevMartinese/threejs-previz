@@ -21,6 +21,15 @@ vocabulary) into concrete Three.js camera animations. It is **engine-agnostic**:
 every move is expressed as one small function and then played back by whatever
 animation engine the project already uses.
 
+## Recent catalog additions
+
+`truck` (straight crawl), `bezier` (curved fly-through — the path that swerves
+around something), and the modifiers `retarget` (gaze handoff along waypoints,
+easing per leg), `drift` (slow noise + breathing on the TARGET — the operator's
+attention, where `handheld` is the body) and `slice` (play a window of one move,
+so several shot entries share a single continuous move without restarting its
+noise or easing). All in `references/camera-moves.md`.
+
 ## The core idea: a move is a function of normalized time
 
 Every camera move — no matter how fancy — is just the camera's state changing

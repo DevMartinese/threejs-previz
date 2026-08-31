@@ -36,6 +36,14 @@ the piece runs; the scene already knows its aspect. Restating `durationInFrames`
 in `<Composition>` is how the two drift apart — you extend a shot, forget the
 composition, and the render stops mid-move with no error and no warning.
 
+`defineScene()` derives all of it — and `animate` (object motion as a pure
+function of the frame) plus `attachments` (declared, measured connections)
+ride the same definition, so the audit gate checks the scene exactly as it
+renders. One hard-won wiring rule: `<PrevizStage>` mounts `ctx.scene` WHOLE —
+R3F's `<primitive>` reparents what it mounts, and mounting groups one by one
+silently empties the scene in the browser while Node keeps passing. Remotion
+also requires a `tsconfig.json` even in an all-JS project.
+
 `defineScene()` derives all of it:
 
 ```js
@@ -93,7 +101,13 @@ component is separate.
 2. **Define each scene with `defineScene()`** from `lib/scene.js`. `build()`
    populates the standard groups; `shots` is the timeline. Both are plain data.
 
-3. **Compose scenes into a film with `defineFilm()`** when the piece is longer
+3. **Compose scenes into a film with `defineFilm()` from `lib/film.js`**
+   (plain JS — the gate audits the real film file) and bind the component with
+   `filmComposition(def, { TransitionSeries, linearTiming, presentation })`
+   from `lib/film.jsx` — the kit is injected so lib never hard-depends on
+   @remotion/transitions, and declaring transitions without injecting it
+   throws at registration instead of silently shortening the film. Verified in
+   both modes; composition ids allow no underscores. Compose films when the piece is longer
    than one scene. It derives the duration, including the transition subtraction,
    and checks the things that fail silently between scenes.
 
