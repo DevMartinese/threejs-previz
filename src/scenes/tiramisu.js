@@ -130,7 +130,8 @@ function build({ ctx, geo, blk }) {
     for (const m of twin) blk.halve(m, 'x');
   }
 
-  const lfGeo = () => geo.ellipsoid({ rx: 0.0085, ry: 0.024, rz: 0.0085 });
+  // a ladyfinger IS a capsule — same envelope the ellipsoid faked (h .048)
+  const lfGeo = () => geo.capsule({ r: 0.0085, length: 0.031 });
   ctx.part('PRP_lf', lfGeo(), 'tan');
   for (let i = 0; i < 3; i++) ctx.part(`PRP_lffloat_${i}`, lfGeo(), 'tan');
 

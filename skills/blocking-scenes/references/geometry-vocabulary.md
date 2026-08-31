@@ -36,6 +36,9 @@ the wrong one turns a two-line shape into an afternoon of mesh editing.
 | a stack of bands | `stack()` | layered cross-section |
 | many copies of one thing | `radial()` / `grid()` / `scatter()` + `instances()` | clones, crowd, debris |
 | a rough organic blob | primitive + `roughen()` / `lobed()` | biscuit, rock, fruit |
+| a pill / rounded rod | `capsule()` | ladyfingers, limbs, olives, capsules |
+| a soft-cornered slab | `roundedBox()` | phones, cards, soap, packaging |
+| a faceted solid | `gem()` (+ `roughen()`) | rocks, boulders, dice, gems |
 | a character or furniture | `figure()` / `chair()` / `table()` | seated proxies, sets |
 
 The two that get missed most often are **`revolve`** and **`extrude`**. Between
@@ -82,6 +85,44 @@ carry the identity. Two rules keep compositions healthy:
 
 If a composition earns its keep across scenes, promote it into `geometry.js` —
 that is how everything already in this file got here.
+
+### The native shelf — everything three.js ships underneath
+
+The helpers wrap this shelf; knowing it is knowing what you can reach for
+directly (`import from 'three'`) when no wrapper fits. Constructor essentials,
+what each is FOR in blocking, and whether CSG can cut it:
+
+| Class (signature essentials) | Blocking use | Watertight? |
+|---|---|---|
+| `BoxGeometry(w, h, d, wSeg, hSeg, dSeg)` | slabs, proxies — segments matter for deformers | ✔ |
+| `CapsuleGeometry(r, length, capSeg, radSeg)` | pills, limbs, ladyfingers (→ `capsule()`) | ✔ |
+| `CylinderGeometry(rTop, rBot, h, radSeg, hSeg, open)` | cans, columns, discs (→ `cone()`); `open: true` breaks watertightness | ✔ closed |
+| `ConeGeometry(r, h, …)` | a Cylinder with rTop 0 | ✔ |
+| `SphereGeometry(r, wSeg, hSeg, φ/θ windows)` | balls; partial φ/θ makes domes and orange-slices (open!) | ✔ full |
+| `LatheGeometry(points, seg, φ)` | solids of revolution (→ `revolve()`); watertight only if the profile closes (→ `cupProfile()`) | profile-dependent |
+| `ExtrudeGeometry(shape, { depth, bevel*, steps, extrudePath })` | flat footprint + thickness, holes, bevels (→ `extrude()`, `roundedBox()`); can extrude ALONG a curve via `extrudePath` | ✔ |
+| `TubeGeometry(path, tubSeg, r, radSeg, closed)` | a fixed-radius pipe along a curve (→ `sweep()` adds taper + caps; raw Tube has OPEN ends) | ✖ open ends |
+| `TorusGeometry(r, tube, radSeg, tubSeg, arc)` | rims, rings, orbits (→ `rim()`); partial `arc` is open | ✔ full |
+| `TorusKnotGeometry(r, tube, tubSeg, radSeg, p, q)` | abstract hero objects, logos-in-space | ✔ |
+| `Icosa/Octa/Dodeca/TetrahedronGeometry(r, detail)` | faceted rocks and gems at `detail: 0` (→ `gem()`); `detail` ≥ 1 tessellates toward a sphere | ✔ |
+| `PlaneGeometry`, `CircleGeometry`, `RingGeometry`, `ShapeGeometry` | flat cards, ground decals, cutouts — **2D: never feed these to CSG** | ✖ flat |
+| `PolyhedronGeometry(verts, indices, r, detail)` | fully custom faceted solids when nothing else fits | you decide |
+| `EdgesGeometry` / `WireframeGeometry` | line overlays for diagram-style renders | n/a (lines) |
+
+**The 2D Shape/Path API** feeds `extrude()` and `ShapeGeometry`: `moveTo`,
+`lineTo`, `quadraticCurveTo`, `bezierCurveTo`, `absarc`, `splineThru`, and
+`shape.holes = [path, …]` — a hole in a slab is a Shape with a hole, never a
+boolean. **Curves** feed `sweep()`/Tube and `extrudePath`: `CatmullRomCurve3`
+(→ `curve()`), `CubicBezierCurve3`, `EllipseCurve`; every curve gives
+`getPointAt(u)` / `getTangentAt(u)` — which is also how you place props along
+a path (→ `alongCurve()`). **Every BufferGeometry transforms in place**:
+`.translate(x,y,z)`, `.rotateX/Y/Z(rad)`, `.scale(x,y,z)`, `.center()` — the
+composition ops behind every helper here.
+
+(From the drei catalog, the piece worth knowing for previz is how `RoundedBox`
+is built — a rounded rect extruded with a same-radius bevel, which is exactly
+`roundedBox()` here. Drei's `Line`/`Instances`/`Edges` are R3F components; in
+this pipeline lines are `sweep()`s and instancing is `instances()`.)
 
 ## 2. Curves and sweeps
 
