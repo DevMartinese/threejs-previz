@@ -196,10 +196,12 @@ const polarXZ = (deg, r, y = 0) => [Math.sin(rad(deg)) * r, y, Math.cos(rad(deg)
 // The frozen espresso arc, spout -> cup top (quadratic bezier).
 // Wide arc: x(t) stays monotonic with >=12 mm between the droplets' vertical
 // rise columns — with a near-vertical tail they all rose through one tube and
-// collided with the ones already frozen.
-const ARC_P0 = [-0.175, 0.28, -0.06], ARC_P1 = [-0.10, 0.33, -0.03], ARC_P2 = [-0.052, 0.162, -0.012];
-const arcAt = (t) => [0, 1, 2].map((k) =>
-  (1 - t) * (1 - t) * ARC_P0[k] + 2 * (1 - t) * t * ARC_P1[k] + t * t * ARC_P2[k]);
+// collided with the ones already frozen. P0 is NOT typed here: the arc starts
+// at the moka's spout anchor, computed per frame from its posed transform.
+const ARC_P1 = [-0.10, 0.33, -0.03], ARC_P2 = [-0.052, 0.162, -0.012];
+const SPOUT = [0.03, 0.095, 0];                // the moka's spout, local space
+const arcAt = (p0, t) => [0, 1, 2].map((k) =>
+  (1 - t) * (1 - t) * p0[k] + 2 * (1 - t) * t * ARC_P1[k] + t * t * ARC_P2[k]);
 
 /* ---------------------------------------------------------------- animate -- */
 const DYNAMIC = [
@@ -338,12 +340,19 @@ function animate({ ctx, frame }) {
 
   if (name === 'pour') {
     // seen from OUTSIDE: cup tilted over the glass, the mascarpone ribbon
-    // running diagonally into it, cookies and beans falling and landing.
-    show('PRP_glass');
+    // running diagonally from its MOUTH into the glass, cookies and beans
+    // falling and landing. The ribbon is derived from anchors, not typed
+    // numbers: origin = the cup's mouth through the scene graph (tilt
+    // included), aim + length = whatever reaches the glass mouth. The glass
+    // sits off-axis so the pour has somewhere to run diagonally TO.
+    show('PRP_glass', [-0.06, 0, 0]);
     placeCup(0.16, { x: 0.07, rotZ: rad(80) });
-    const r = show('PRP_ribbon', [0.025, 0.168, 0]);
-    r.rotation.z = rad(14);
-    r.scale.y = lerp(0.5, 0.68, ramp(f, 0, 18));
+    const mouth = ctx.anchor('PRP_cup', [0, CUP_H, 0]);
+    const glassMouth = ctx.anchor('PRP_glass', [0, 0.05, 0]);
+    const dx = mouth.x - glassMouth.x, dy = mouth.y - glassMouth.y;
+    const r = show('PRP_ribbon', [mouth.x, mouth.y, mouth.z]);
+    r.rotation.z = Math.atan2(-dx, dy);   // Rz(t)*(0,-L) = (+L sin t, -L cos t)
+    r.scale.y = (Math.hypot(dx, dy) / 0.19) * lerp(0.7, 1, ramp(f, 0, 18));
     showCookie(0, [-0.13, lerp(0.42, 0.02, ramp(f, 0, 45, fallEase)), 0.05],
                [rad(20 + Math.min(f, 45)), 0, rad(15)]);
     showCookie(1, [0.16, lerp(0.5, 0.02, ramp(f, 15, 50, fallEase)), -0.06],
@@ -372,8 +381,9 @@ function animate({ ctx, frame }) {
     placeCup(HOVER);
     show('PRP_moka', [-0.22, 0.25 + 0.004 * Math.sin(f * 0.05), -0.07])
       .rotation.set(0, rad(15), rad(-35));
+    const spout = ctx.anchor('PRP_moka', SPOUT).toArray();
     for (let i = 0; i < 8; i++) {
-      const [ax, ay, az] = arcAt(0.08 + 0.84 * (i / 7));
+      const [ax, ay, az] = arcAt(spout, 0.08 + 0.92 * (i / 7));
       const up = ramp(f, i * 5, 26, easings.easeOutCubic);
       show(`PRP_drop_${i}`, [ax, lerp(0.008, ay, up), az]);
     }
@@ -430,6 +440,16 @@ export default defineScene({
   identity,
   ignore,
   floorIgnore: ['PRP_lf'],   // it buries itself in the cocoa mound
+  // The chain, measured: the pour hangs from the cup's mouth and lands in the
+  // glass; the espresso arc starts at the moka's spout and ends on the cup's
+  // lip. `settle` entries are checked once the move has arrived.
+  attachments: [
+    { a: 'PRP_ribbon', b: 'PRP_cup', bLocal: [0, CUP_H, 0], tol: 0.004 },
+    { a: 'PRP_ribbon', aLocal: [0, -0.19, 0],
+      b: 'PRP_glass', bLocal: [0, 0.05, 0], tol: 0.02, settle: true },
+    { a: 'PRP_drop_0', b: 'PRP_moka', bLocal: [0.03, 0.095, 0], tol: 0.03, settle: true },
+    { a: 'PRP_drop_7', b: 'PRP_cup', bLocal: [-0.045, 0.07, -0.012], tol: 0.016, settle: true },
+  ],
   build,
   animate,
   shots: [

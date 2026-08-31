@@ -81,6 +81,11 @@ real scene rather than a stub.
      existence *on screen*, nothing teleports. Entering from off-screen,
      emerging from behind something, sinking into water, and same-place swaps
      (a can replaced by its CSG slices) are automatically legitimate.
+  7. **Attachments** — declared connections, measured: "the pour hangs from
+     the cup's mouth", "the last droplet sits on the lip". Author them from
+     `ctx.anchor(name, localPoint)` (world positions through the scene graph,
+     never typed trigonometry), then declare them in `attachments:` and the
+     audit reports pair, distance and frame when a chain disconnects.
 
   Every shot declares its `hero` — what must stay in frame. `hero: []` marks a
   transitional shot: framing and occlusion waived, everything else still runs.

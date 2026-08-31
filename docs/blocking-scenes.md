@@ -244,6 +244,40 @@ shot: `pops: ['PRP_debris_*']`. This is the audit that encodes "the clones
 come out of the can — they don't spawn beside it": born at the can's own
 position they emerge occluded and pass; born next to it they pop and fail.
 
+### Anchors and attachments — connections are derived, then measured
+
+Anything that connects to something — a pour to the mouth it pours from, a
+stream to the vessel it lands in, a hand to a handle — follows two rules:
+
+**Author the connection from an anchor, never from typed trigonometry.**
+`ctx.anchor(name, localPoint)` returns the world position of a local point on
+a part, through the scene graph with its current pose: `anchor('PRP_cup',
+[0, CUP_H, 0])` IS the tilted cup's mouth. Deriving the pour's origin, aim and
+length from anchors survives every later change to the cup's tilt; a
+hand-typed constant silently pours out of the belly. (A real session found
+exactly that, plus a sign error in a hand-rotated offset — `Rz(θ)·(0,−L)`
+lands at `(+L·sinθ, −L·cosθ)` — that the eye had been forgiving for three
+stills.)
+
+**Then declare the connection, and the audit measures it.**
+
+```js
+attachments: [
+  { a: 'PRP_ribbon', b: 'PRP_cup', bLocal: [0, CUP_H, 0], tol: 0.004 },
+  { a: 'PRP_ribbon', aLocal: [0, -0.19, 0],           // the ribbon's tip…
+    b: 'PRP_glass', bLocal: [0, 0.05, 0],             // …in the glass mouth
+    tol: 0.02, settle: true },                        // once the pour lands
+]
+```
+
+Each entry joins a local point on `a` to one on `b`; the audit checks their
+world distance (scale and rotation included) at every sampled frame where both
+are visible — `settle: true` only at a shot's last sample, for connections a
+move is still reaching for. Failures name the pair, the distance and the
+frame: `attach PRP_ribbon<->PRP_glass 0.1221 > 0.0200 @f544`. This is what
+makes a prop *chain* — moka pours to cup, cup pours to glass — a measurement
+instead of a hope.
+
 ### The timeline has no gaps
 
 `shotList` throws if any frame has no owning shot — a frame in a gap silently
