@@ -25,6 +25,16 @@ export function orbitalShots({
   heroWide, heroKey = null, occlusionIgnore = [],
   rise = false, dive = true, from = 0, to = 240,
 }) {
+  // A FULL 360-degree lap at orbit height around every world — the vuelta is
+  // complete before the world changes. The rise/dive are EXTRA azimuth (45
+  // degrees each) beyond the lap: the camera keeps turning while it swoops
+  // over and in, so each scene starts where the last one ended angularly and
+  // the whole film is one continuous rotation.
+  const TDEG = 45;
+  const azTotal = 360 + (rise ? TDEG : 0) + (dive ? TDEG : 0);
+  const rU = rise ? TDEG / azTotal : 0;      // u spent rising
+  const dU = dive ? TDEG / azTotal : 0;      // u spent diving
+  const W = 1 - rU - dU;                     // the at-height lap window
   /** The whole lap as one pure move: azimuth 0..360. The transition is an
    *  OVER-THE-TOP plunge: in the last 14% the camera keeps orbiting while it
    *  climbs above the scene (apex ~0.32R over orbit height) and dives down
@@ -43,14 +53,15 @@ export function orbitalShots({
     };
   };
   const lap = (u) => {
-    const az = rad(startDeg + 360 * u);
+    const az = rad(startDeg + azTotal * u);
     let rx = R, h = H, down = 0;
-    if (rise && u < 0.14) ({ rx, h, down } = overTop(1 - u / 0.14));
-    if (dive && u > 0.86) ({ rx, h, down } = overTop((u - 0.86) / 0.14));
+    if (rise && u < rU) ({ rx, h, down } = overTop(1 - u / rU));
+    if (dive && u > 1 - dU) ({ rx, h, down } = overTop((u - (1 - dU)) / dU));
     const position = [Math.sin(az) * rx, h, Math.cos(az) * rx];
     let target = center;
     if (key) {
-      const w = smooth((u - 0.42) / 0.09) - smooth((u - 0.58) / 0.09);
+      const w = smooth((u - (rU + 0.37 * W)) / (0.06 * W))
+              - smooth((u - (rU + 0.51 * W)) / (0.06 * W));
       target = [lerp(center[0], key[0], w), lerp(center[1], key[1], w),
                 lerp(center[2], key[2], w)];
     }
@@ -65,30 +76,35 @@ export function orbitalShots({
   const span = to - from;
   const F = (frac) => from + Math.round(span * frac);
   const occ = { ignore: occlusionIgnore };
+  // time fractions: transitions are quick beats; the linger buys its slowness
+  // with time (22% of the frames for 8% of the lap's arc)
+  const tRise = rise ? 0.10 : 0;
+  const tDive = dive ? 0.10 : 0;
+  const seg = (fr) => tRise + (1 - tRise - tDive) * fr;
+  const u1 = rU + 0.40 * W, u2 = rU + 0.48 * W;   // the linger's arc
   const shots = [];
   if (rise) {
-    shots.push({ name: 'RISE', from, to: F(0.14), focalLength: focal,
-      easing: 'linear', hero: [], clearance: 0, move: win(0, 0.14) });
+    shots.push({ name: 'RISE', from, to: F(tRise), focalLength: focal,
+      easing: 'linear', hero: [], clearance: 0, move: win(0, rU) });
   }
   shots.push(
-    { name: 'ORB_in', from: rise ? F(0.14) : from, to: F(0.42), focalLength: focal,
+    { name: 'ORB_in', from: rise ? F(tRise) : from, to: F(seg(0.40)), focalLength: focal,
       easing: 'easeInOutSine', hero: heroWide, occlusion: occ, joins: rise,
-      move: win(rise ? 0.14 : 0, 0.47) },
-    { name: 'ORB_linger', from: F(0.42), to: F(0.63), focalLength: focal,
+      move: win(rU, u1) },
+    { name: 'ORB_linger', from: F(seg(0.40)), to: F(seg(0.62)), focalLength: focal,
       easing: 'linear', hero: heroKey ?? heroWide, occlusion: occ, joins: true,
-      move: win(0.47, 0.55) },
-    { name: 'ORB_out', from: F(0.63), to: dive ? F(0.86) : to, focalLength: focal,
+      move: win(u1, u2) },
+    { name: 'ORB_out', from: F(seg(0.62)), to: dive ? F(1 - tDive) : to, focalLength: focal,
       easing: 'easeInOutSine', hero: heroWide, occlusion: occ, joins: true,
-      move: win(0.55, dive ? 0.86 : 1) });
+      move: win(u2, dive ? 1 - dU : 1) });
   if (dive) {
-    // Half-open arithmetic: the last RENDERED frame of this scene is to-1,
-    // which maps to progress (n-1)/n — stretch the window so that frame
-    // lands exactly on u=1, or the boundary pose misses the next scene's
-    // u=0 by one frame of trajectory (the seam check caught 0.306m of it).
-    const dF = to - F(0.86);
-    shots.push({ name: 'DIVE', from: F(0.86), to, focalLength: focal,
+    // Half-open arithmetic: the last RENDERED frame of this scene is to-1 —
+    // stretch the window so that frame lands exactly on u=1, or the boundary
+    // pose misses the next scene's u=0 by one frame of trajectory.
+    const dF = to - F(1 - tDive);
+    shots.push({ name: 'DIVE', from: F(1 - tDive), to, focalLength: focal,
       easing: 'linear', hero: [], clearance: 0, joins: true,
-      move: win(0.86, 0.86 + 0.14 * dF / (dF - 1)) });
+      move: win(1 - dU, 1 - dU + dU * dF / (dF - 1)) });
   }
   return shots;
 }

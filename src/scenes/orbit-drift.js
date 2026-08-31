@@ -78,6 +78,7 @@ export default defineScene({
   build,
   animate,
   shots: orbitalShots({
+    startDeg: 105,  // = the court scene's exit azimuth
     center: [0.6, 1.0, 0.4],
     key: [0.6, 1.62, 0.4],                         // the artist's head
     // torso + head, not limbs: arms hug the torso and self-occlude

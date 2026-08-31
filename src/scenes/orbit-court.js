@@ -65,6 +65,7 @@ export default defineScene({
   ignore,
   build,
   shots: orbitalShots({
+    startDeg: 15,   // = the car scene's exit azimuth: one continuous rotation
     center: [-0.85, 1.62, 0],
     key: [-2.45, 3.0, 0.12],                        // the ball at the rim
     heroWide: 'PRP_ball', heroKey: 'PRP_ball',

@@ -50,6 +50,7 @@ export default defineScene({
   ignore,
   build,
   shots: orbitalShots({
+    startDeg: -30,
     center: [0, 1.1, 0],
     // gaze leans TOWARD red on the hood without centring them — a smaller
     // excursion, so the return leg doesn't push the car out of ORB_out
