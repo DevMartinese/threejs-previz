@@ -483,7 +483,7 @@ export default defineScene({
     { name: 'SC01a_impact', from: 0, to: 36, focalLength: 45, easing: 'linear',
       hero: [],
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.16, target: [0, 0.125, 0] }), 0, 0.4) },
-    { name: 'SC01b_freeze', from: 36, to: 90, focalLength: 45, easing: 'linear',
+    { name: 'SC01b_freeze', from: 36, to: 90, focalLength: 45, easing: 'linear', joins: true,
       hero: ['PRP_cup', 'PRP_cupS_*'],
       occlusion: { ignore: [...FILLINGS, 'PRP_cloud_*'] },
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.16, target: [0, 0.125, 0] }), 0.4, 1) },

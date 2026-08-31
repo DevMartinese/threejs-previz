@@ -346,7 +346,7 @@ export default defineScene({
     { name: 'SC01a_impact', from: 0, to: 60, focalLength: 32, easing: 'linear',
       hero: [],
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.2, target: [0, 0.18, 0] }), 0, 0.4) },
-    { name: 'SC01b_freeze', from: 60, to: 150, focalLength: 32, easing: 'linear',
+    { name: 'SC01b_freeze', from: 60, to: 150, focalLength: 32, easing: 'linear', joins: true,
       hero: ['PRP_can', 'PRP_canS_*'],
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.2, target: [0, 0.18, 0] }), 0.4, 1) },
 

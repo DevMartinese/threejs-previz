@@ -216,9 +216,9 @@ export default defineScene({
         { name: 'SC04a_ots_purple', from: 492, to: 568, focalLength: 40,
           easing: 'linear', hero: 'CHR_purple_head', move: slice(whole, 0, 1 / 3) },
         { name: 'SC04b_slide', from: 568, to: 644, focalLength: 40,
-          easing: 'linear', hero: [], move: slice(whole, 1 / 3, 2 / 3) },
+          easing: 'linear', hero: [], joins: true, move: slice(whole, 1 / 3, 2 / 3) },
         { name: 'SC04c_end_cyan', from: 644, to: 720, focalLength: 40,
-          easing: 'linear', hero: 'CHR_cyan_head', move: slice(whole, 2 / 3, 1) },
+          easing: 'linear', hero: 'CHR_cyan_head', joins: true, move: slice(whole, 2 / 3, 1) },
       ];
     })(),
   ],

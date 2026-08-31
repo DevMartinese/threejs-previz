@@ -72,13 +72,13 @@ export function orbitalShots({
   }
   shots.push(
     { name: 'ORB_in', from: rise ? F(0.14) : from, to: F(0.42), focalLength: focal,
-      easing: 'easeInOutSine', hero: heroWide, occlusion: occ,
+      easing: 'easeInOutSine', hero: heroWide, occlusion: occ, joins: rise,
       move: win(rise ? 0.14 : 0, 0.47) },
     { name: 'ORB_linger', from: F(0.42), to: F(0.63), focalLength: focal,
-      easing: 'linear', hero: heroKey ?? heroWide, occlusion: occ,
+      easing: 'linear', hero: heroKey ?? heroWide, occlusion: occ, joins: true,
       move: win(0.47, 0.55) },
     { name: 'ORB_out', from: F(0.63), to: dive ? F(0.86) : to, focalLength: focal,
-      easing: 'easeInOutSine', hero: heroWide, occlusion: occ,
+      easing: 'easeInOutSine', hero: heroWide, occlusion: occ, joins: true,
       move: win(0.55, dive ? 0.86 : 1) });
   if (dive) {
     // Half-open arithmetic: the last RENDERED frame of this scene is to-1,
@@ -87,7 +87,7 @@ export function orbitalShots({
     // u=0 by one frame of trajectory (the seam check caught 0.306m of it).
     const dF = to - F(0.86);
     shots.push({ name: 'DIVE', from: F(0.86), to, focalLength: focal,
-      easing: 'linear', hero: [], clearance: 0,
+      easing: 'linear', hero: [], clearance: 0, joins: true,
       move: win(0.86, 0.86 + 0.14 * dF / (dF - 1)) });
   }
   return shots;

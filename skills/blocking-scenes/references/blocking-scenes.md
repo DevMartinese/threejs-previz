@@ -244,6 +244,25 @@ shot: `pops: ['PRP_debris_*']`. This is the audit that encodes "the clones
 come out of the can — they don't spawn beside it": born at the can's own
 position they emerge occluded and pass; born next to it they pop and fail.
 
+### Camera path — the orbit that must not teleport
+
+A discontinuous camera path reads on screen as the camera passing through
+objects and reappearing elsewhere — it isn't passing through anything, it
+teleports, and the classic cause is an orbit angle wrapping through `%`,
+`atan2` or a re-shortest-pathed quaternion. The angle must run monotonically
+from start to start+arc.
+
+The continuity sweep now watches the CAMERA too: every frame of every shot,
+position step and view-direction turn, flagged when a step exceeds 5x the
+shot's own median (with floors tuned so a real close fly-by — 1.35x median,
+a smooth 12deg/frame whip — never flags, and a half-turn wrap always does):
+`camera jump 7.998m/160.0deg@f72` names the frame and the size. Steps ACROSS
+shot boundaries are informational — a hard cut is supposed to jump — unless
+the shot declares `joins: true` (entries playing slices of one continuous
+move), in which case the splice is enforced: within 3x the median step and
+10 degrees. Never smooth, clamp or lerp across a flagged jump: that hides
+the discontinuity; fix the path.
+
 ### Anchors and attachments — connections are derived, then measured
 
 Anything that connects to something — a pour to the mouth it pours from, a
