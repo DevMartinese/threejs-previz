@@ -8,6 +8,7 @@ import demo from './scenes/demo.js';
 import roundtable from './scenes/roundtable.js';
 import opening from './scenes/opening.js';
 import canspot from './scenes/canspot.js';
+import tiramisu from './scenes/tiramisu.js';
 import feature, { stitched } from './film.js';
 
 // One <Composition> per scene and per film. Everything — id, fps, size,
@@ -21,6 +22,7 @@ export const RemotionRoot = () => (
     <Composition {...sceneComposition(roundtable)} />
     <Composition {...sceneComposition(opening)} />
     <Composition {...sceneComposition(canspot)} />
+    <Composition {...sceneComposition(tiramisu)} />
     <Composition {...sceneComposition(demo)} />
     <Composition {...filmComposition(feature, transitionKit)} />
     <Composition {...filmComposition(stitched, transitionKit)} />

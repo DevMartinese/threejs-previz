@@ -47,6 +47,42 @@ make a hole works, but `extrude` with a hole is cheaper, more robust and stays
 watertight. Save the booleans for cross-sections and slices, where there is no
 alternative.
 
+### When the helper doesn't exist: compose it
+
+The named helpers are conveniences, not the vocabulary. The vocabulary is the
+closed set underneath — primitives (`cone`, `box`, `ellipsoid`, `rim`, `disc`),
+generators (`revolve` + profiles, `extrude` + shapes, `sweep` + curves),
+deformers, and the composition ops: **`.translate()` / `.rotateX()` /
+`.scale()` on any geometry, and `merge()`** to weld several into one mesh.
+Anything blockable is reachable from that set; a helper like `sandwich()` is
+just a saved composition (three translated cylinders — if it didn't exist you
+would write it in build in four lines).
+
+A worked example that is not in the catalog anywhere — a moka pot, one mesh,
+one identity, built from three faceted cones:
+
+```js
+ctx.part('PRP_moka', geo.merge([
+  geo.cone({ rBottom: .035, rTop: .02,  h: .05,  segments: 8 }).translate(0, .025,  0),
+  geo.cone({ rBottom: .02,  rTop: .03,  h: .045, segments: 8 }).translate(0, .0725, 0),
+  geo.cone({ rBottom: .008, rTop: .005, h: .01,  segments: 8 }).translate(0, .1,    0),
+]), 'steel');
+```
+
+`segments: 8` is what makes it read as a moka rather than a vase — the facets
+carry the identity. Two rules keep compositions healthy:
+
+- **Author at the origin, place with the mesh.** Translate geometry only to
+  arrange parts *within* the composition (the moka's three cones); position
+  the finished part with `mesh.position`, so animation and CSG stay simple.
+- **`merge()` when it shares one identity, separate parts when it doesn't.**
+  One mesh = one colour and one audit name. A composition with two materials
+  (a cookie's shell and fill) is separate `ctx.part`s posed together — that is
+  also what lets an audit report `PRP_ck0_fill` instead of `Mesh`.
+
+If a composition earns its keep across scenes, promote it into `geometry.js` —
+that is how everything already in this file got here.
+
 ## 2. Curves and sweeps
 
 ```js
