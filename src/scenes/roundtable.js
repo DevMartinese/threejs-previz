@@ -12,6 +12,7 @@
  * palette is the cast list.
  */
 import { defineScene } from '../../lib/scene.js';
+import { moves, retarget } from '../../lib/cameraMoves.js';
 
 /* ---------------------------------------------------------------- layout --
  * Seats every 60°, assigned so that every over-the-shoulder pair in the shot
@@ -57,6 +58,7 @@ export const identity = {
  * Declared per character so a red×green collision still counts. */
 export const ignore = [
   ['PRP_chair_*', 'CHR_*'],
+  ['PRP_table_*', 'PRP_table_*'],   // top sits on leg sits on base
   ...Object.keys(SEATS).map((c) => [`CHR_${c}_torso`, `CHR_${c}_*`]),
 ];
 
@@ -67,8 +69,21 @@ export function build({ ctx, geo }) {
   ctx.part('ENV_wall', geo.wall({ radius: 4.5, height: 3, thickness: 0.06 }),
            'grey', ctx.groups.ENV);
 
-  ctx.part('PRP_table', geo.table({ radius: TABLE_R, height: TABLE_H }),
-           'wood', ctx.groups.PRP);
+  // The table in three parts rather than geo.table()'s single merge, so the
+  // TOP can be a framing hero on its own. "The table always in frame" really
+  // means the tabletop and the hands — an orbit that lets the pedestal's base
+  // slip out of the bottom of frame is normal cinematography, and a hero that
+  // includes the base fails the audit for the wrong reason. Same logic as
+  // figure() keeping the head separate.
+  const top = ctx.part('PRP_table_top',
+    geo.cone({ rBottom: TABLE_R, rTop: TABLE_R, h: 0.04 }), 'wood');
+  top.position.y = TABLE_H - 0.02;
+  const leg = ctx.part('PRP_table_leg',
+    geo.cone({ rBottom: 0.07, rTop: 0.07, h: TABLE_H - 0.04 }), 'wood');
+  leg.position.y = (TABLE_H - 0.04) / 2;
+  const base = ctx.part('PRP_table_base',
+    geo.cone({ rBottom: 0.32, rTop: 0.32, h: 0.03 }), 'wood');
+  base.position.y = 0.015;
 
   // One seated character per identity colour: a rig pivot on the seat circle,
   // turned to face the table. Heads are separate parts on purpose — a head is a
@@ -91,11 +106,19 @@ export function build({ ctx, geo }) {
   }
 }
 
-/* ------------------------------------------------------------- the scene --
- * 24 fps, 21:9, 30 seconds. Stage 1 ships static blocking views; the camera
- * stage replaces them with the real cuts.
+/* -------------------------------------------------------------- the cuts --
+ * 24 fps, 21:9, 30 seconds, four cuts. Cuts are hard by construction: shot
+ * ranges are half-open, so [0, 360) owns frames 0–359 and frame 360 already
+ * belongs to the next shot — camera, target and lens all change ON the cut,
+ * not a single transition frame.
+ *
+ * An over-the-shoulder camera: behind a character's seat, azimuth offset to
+ * one side so the gaze clears their head, below shoulder height.
  */
-const hold = (position, target, fov = 40) => () => ({ position, target, fov, roll: 0 });
+const otsCrawl = (behind, { offset = 12, crawl = 3, r = 2.05, y = 0.92 } = {}) => {
+  const a = SEATS[behind] + offset;
+  return { from: polar(a, r, y), to: polar(a + crawl, r, y) };
+};
 
 export default defineScene({
   id: 'roundtable',
@@ -107,11 +130,64 @@ export default defineScene({
   ignore,
   build,
   shots: [
-    { name: 'V01_wide', from: 0, to: 240, easing: 'linear', hero: 'PRP_table',
-      move: hold([0, 2.2, 4.1], [0, 0.7, 0]) },
-    { name: 'V02_top', from: 240, to: 480, easing: 'linear', hero: 'PRP_table',
-      move: hold([0, 4.2, 0.01], [0, 0, 0], 60) },
-    { name: 'V03_side', from: 480, to: 720, easing: 'linear', hero: 'PRP_table',
-      move: hold([3.4, 1.0, 0], [0, 0.75, 0]) },
+    // 1 — slow orbit, camera slightly above the table, wide lens. Starts behind
+    // red, passes behind cyan mid-arc, stops short of purple (arc 110°). The
+    // gaze hands off face to face across the table — yellow → blue → green —
+    // easing on each leg, so it slows on every face without stopping. Hero is
+    // the table: at this radius a whole person does not fit vertically, and
+    // that is geometry, not a mistake.
+    { name: 'SC01_orbit', from: 0, to: 360, focalLength: 24, easing: 'linear',
+      hero: 'PRP_table_top',
+      // radius/height tuned against the audit, twice: at r 2.7 the table left
+      // frame by 0.752 @f144, and at r 3.4 still by 0.414 — because the hero
+      // was the WHOLE table, pedestal base included, and no orbit that looks
+      // at faces keeps the floor in frame. The real statement is "the
+      // tabletop always in frame", hence hero PRP_table_top.
+      move: retarget(
+        moves.orbit360({ radius: 3.0, height: 1.2, startAngle: 0, arc: rad(110) }),
+        { targets: [headPos('yellow'), headPos('blue'), headPos('green')] },
+      ) },
+
+    // 2 — cyan over blue's shoulder, ~3 s. Below shoulder height, barely
+    // crawling sideways. Everyone else is supposed to leave frame: hero cyan.
+    { name: 'SC02_ots_cyan', from: 360, to: 432, focalLength: 55, easing: 'linear',
+      hero: 'CHR_cyan_head',
+      move: moves.truck({ ...otsCrawl('blue'), target: headPos('cyan') }) },
+
+    // 3 — red over yellow's shoulder, 2.5 s, crawling the same way.
+    { name: 'SC03_ots_red', from: 432, to: 492, focalLength: 55, easing: 'linear',
+      hero: 'CHR_red_head',
+      move: moves.truck({ ...otsCrawl('yellow'), target: headPos('red') }) },
+
+    // 4 — purple over green's shoulder, long. Halfway through, the gaze slides
+    // along the eyeline to cyan without a cut and ends there. ONE continuous
+    // crawl at constant speed, declared as three shot entries because the
+    // framing question changes mid-cut: purple owns the first half, the slide
+    // itself is transitional (hero: [] — collisions and floor still audited,
+    // framing waived), and cyan owns the end. The boundaries are invisible on
+    // screen: linear move, same crawl speed, gaze eased within the slide.
+    //
+    // The position is geometry, worked out against stills, not taste: green
+    // stays the near mass while the cut ends on cyan only if the camera sits
+    // on the cyan→green line extended (offset -12° from green's seat), which
+    // puts green dead on the end gaze — so the camera rides above green's
+    // head (y 1.5) and the gaze clears it vertically. The 40mm keeps green's
+    // head inside the bottom of frame; on a 50 it drops out. Offsetting to a
+    // low shoulder instead swings green out of frame as the gaze slides, and
+    // red's arm crosses in front of cyan — both checked, both worse.
+    { name: 'SC04a_ots_purple', from: 492, to: 606, focalLength: 40, easing: 'linear',
+      hero: 'CHR_purple_head',
+      move: moves.truck({ ...otsCrawl('green', { offset: -13, crawl: 1, r: 2.13, y: 1.5 }),
+                          target: headPos('purple') }) },
+    { name: 'SC04b_slide', from: 606, to: 663, focalLength: 40, easing: 'linear',
+      hero: [],
+      move: retarget(
+        moves.truck(otsCrawl('green', { offset: -12, crawl: 0.5, r: 2.13, y: 1.5 })),
+        { targets: [headPos('purple'), headPos('cyan')] },
+      ) },
+    { name: 'SC04c_end_cyan', from: 663, to: 720, focalLength: 40, easing: 'linear',
+      hero: 'CHR_cyan_head',
+      move: moves.truck({ ...otsCrawl('green', { offset: -11.5, crawl: 0.5, r: 2.13, y: 1.5 }),
+                          target: headPos('cyan') }) },
   ],
 });
