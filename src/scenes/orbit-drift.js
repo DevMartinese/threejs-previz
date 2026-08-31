@@ -30,12 +30,14 @@ const CAR_PARTS = ['PRP_car_body', 'PRP_car_cabin',
   'PRP_car_wheel_fl', 'PRP_car_wheel_fr', 'PRP_car_wheel_rl', 'PRP_car_wheel_rr',
   'PRP_beam_l', 'PRP_beam_r'];
 const DRIFT_R = 3.4, DRIFT_YAW = 28;              // nose yawed into the circle
+const ARTIST = [0.6, 0, 0.4];   // off the plunge axis — the camera bursts up
+                                // through the floor at the origin, not through them
 
 function build({ ctx, geo }) {
   ctx.part('ENV_floor', geo.disc({ radius: 14 }), 'nightfloor', ctx.groups.ENV);
 
   const f = geo.figure({ height: 1.78, seated: false });
-  const rig = ctx.pivot('CHR_artist_rig', [0, 0, 0], ctx.groups.CHR);
+  const rig = ctx.pivot('CHR_artist_rig', ARTIST, ctx.groups.CHR);
   for (const p of ['torso', 'head', 'arms', 'legs'])
     ctx.part(`CHR_artist_${p}`, f[p], 'artist', rig);
 
@@ -54,7 +56,8 @@ function build({ ctx, geo }) {
  *  artist, nose yawed inward — a pure function of the frame. */
 function animate({ ctx, frame }) {
   const angle = frame * 1.6;                       // ~3.2 laps over the film
-  const [x, , z] = polarXZ(angle, DRIFT_R);
+  const [dx, , dz] = polarXZ(angle, DRIFT_R);
+  const x = ARTIST[0] + dx, z = ARTIST[2] + dz;
   for (const name of CAR_PARTS) {
     const o = ctx.get(name);
     o.visible = true;
@@ -75,8 +78,8 @@ export default defineScene({
   build,
   animate,
   shots: orbitalShots({
-    center: [0, 1.0, 0],
-    key: [0, 1.62, 0],                             // the artist's head
+    center: [0.6, 1.0, 0.4],
+    key: [0.6, 1.62, 0.4],                         // the artist's head
     // torso + head, not limbs: arms hug the torso and self-occlude
     heroWide: ['CHR_artist_torso', 'CHR_artist_head'], heroKey: 'CHR_artist_head',
     // the car crossing the artist IS the drift; and a figure's own limbs
