@@ -46,6 +46,7 @@ const identity = {
   tan: '#d8a35f',
   espresso: '#31201a',
   bean: '#5d3a22',
+  dust: '#7d4a33',
   glass: '#d8cfc0',
   steel: '#8f8a80',
 };
@@ -76,6 +77,11 @@ const H_PARTS = ['PRP_cup', ...Object.keys(SLICE_OF)];
 const V_PARTS = ['PRP_cupV', ...LAYERS.map((l) => `PRP_V${l.name}`)]
   .flatMap((n) => [`${n}_neg`, `${n}_pos`]);
 
+/* The cocoa cloud: a seeded cluster shared by build (meshes) and animate
+ * (detonation directions). Chunky spheres like the Blender reference — some
+ * nearly half the cup's radius — that burst from the impact and drift. */
+const CLOUD = [];
+
 /* Contact by design, declared per class. */
 const ignore = [
   ['PRP_cup*', 'PRP_L*'], ['PRP_cup*', 'PRP_top_cocoa'],
@@ -87,6 +93,8 @@ const ignore = [
   ['PRP_ribbon', 'PRP_glass'], ['PRP_ribbon', 'PRP_cup*'],
   ['PRP_ribbon', 'PRP_L*'], ['PRP_ribbon', 'PRP_top_cocoa'],
   ['PRP_glasscream', 'PRP_glass'],
+  ['PRP_cloud_*', 'PRP_*'],
+  ['PRP_puff_*', 'PRP_drop_*'], ['PRP_puff_*', 'PRP_cup*'],
 ];
 
 /* The fillings (and their vertical halves) are part of the hero, never
@@ -129,6 +137,17 @@ function build({ ctx, geo, blk }) {
                              shell: 0.004, fill: 0.003, outer: 'espresso', inner: 'cream' }));
     for (const m of twin) blk.halve(m, 'x');
   }
+
+  // The cocoa cloud + impact puffs share the 'dust' material so its opacity
+  // can fade (a pure function of the frame) without touching the cocoa top.
+  const dustMat = ctx.material('dust');
+  dustMat.transparent = true;
+  CLOUD.length = 0;
+  CLOUD.push(...geo.cluster({ name: 'PRP_cloud', count: 12, radius: 0.055,
+                              min: 0.006, max: 0.018, identity: 'dust', seed: 7 }));
+  ctx.parts(CLOUD);
+  for (let i = 0; i < 8; i++)
+    ctx.part(`PRP_puff_${i}`, geo.ellipsoid({ rx: 0.008, ry: 0.006, rz: 0.008 }), 'dust');
 
   // a ladyfinger IS a capsule — same envelope the ellipsoid faked (h .048)
   const lfGeo = () => geo.capsule({ r: 0.0085, length: 0.031 });
@@ -215,6 +234,8 @@ const DYNAMIC = [
   ...CLONES.map((c) => `PRP_clone_${c}`),
   'PRP_glass', 'PRP_glasscream', 'PRP_ribbon', 'PRP_moka', 'ENV_grid',
   ...Array.from({ length: 8 }, (_, i) => `PRP_drop_${i}`),
+  ...Array.from({ length: 8 }, (_, i) => `PRP_puff_${i}`),
+  ...Array.from({ length: 12 }, (_, i) => `PRP_cloud_${String(i).padStart(2, '0')}`),
   ...Array.from({ length: 15 }, (_, i) => `PRP_macro_${i}`),
 ];
 
@@ -255,6 +276,7 @@ function animate({ ctx, frame }) {
     for (const p of ['bot', 'fill', 'top'])
       show(`PRP_ck${i}_${p}`, [x, y, z]).rotation.set(...rot);
   };
+  ctx.material('dust').opacity = 1;
   const cut = Object.entries(CUT).find(([, [a, b]]) => frame >= a && frame < b);
   if (!cut) return;
   const [name, [start]] = cut;
@@ -267,6 +289,26 @@ function animate({ ctx, frame }) {
     // frame; freeze, split (66-96) showing the layer edges, cookies crack
     // open showing the cream, snap (96-108), one sharp full turn at a tilt.
     if (f < 30) show('PRP_lf', [0.05, lerp(0.7, -0.004, f / 29), -0.03]);
+    // The cocoa cloud: born inside the mound (occluded — no pop), it
+    // DETONATES outward at the impact, lingers and drifts for the rest of
+    // the shot, and fades out before the next scene (material opacity, a
+    // pure function of the frame; once < .5 it stops blocking sightlines).
+    ctx.material('dust').opacity = 1 - ramp(f, 120, 26);
+    const boom = ramp(f, 26, 10, easings.easeOutCubic);
+    const driftT = Math.max(0, f - 36) / 114;
+    CLOUD.forEach((d, i) => {
+      const [bx, by, bz] = d.position;
+      const e = 0.06 + boom * 0.99 + driftT * 0.35;
+      const airY = 0.05 + Math.abs(by) * e * 0.8 + driftT * 0.03
+        + 0.004 * Math.sin(f * 0.1 + i * 2);
+      const o = show(`PRP_cloud_${String(i).padStart(2, '0')}`, [
+        bx * e,
+        lerp(0.006, airY, Math.min(1, boom * 1.2)),   // continuous burial->air
+        bz * e,
+      ]);
+      o.scale.setScalar(0.18 + 0.82 * boom);
+      o.rotation.set(rad(i * 40 + f * 0.3), rad(i * 70), 0);
+    });
     const rise = ramp(f, 26, 30, easings.easeOutCubic);
     const split = ramp(f, 66, 30) - ramp(f, 96, 12, easings.easeInOutCubic);
     const splitting = f >= 63 && f < 108;
@@ -387,6 +429,9 @@ function animate({ ctx, frame }) {
       const [ax, ay, az] = arcAt(spout, 0.08 + 0.92 * (i / 7));
       const up = ramp(f, i * 5, 26, easings.easeOutCubic);
       show(`PRP_drop_${i}`, [ax, lerp(0.008, ay, up), az]);
+      const bloom = ramp(f, i * 5 + 26, 8, easings.easeOutCubic);
+      show(`PRP_puff_${i}`, [ax, ay + 0.005, az])
+        .scale.setScalar(Math.max(0.001, bloom));
     }
   }
 
@@ -459,7 +504,8 @@ export default defineScene({
       hero: [],
       move: slice(moves.pushIn({ from: 0.38, to: 0.3, height: 0.15, target: [0, 0.13, 0] }), 0, 0.4) },
     { name: 'SC01b_freeze', from: 60, to: 150, focalLength: 32, easing: 'linear',
-      hero: ['PRP_cup', 'PRP_cupS_*'], occlusion: { ignore: FILLINGS },
+      hero: ['PRP_cup', 'PRP_cupS_*'],
+      occlusion: { ignore: [...FILLINGS, 'PRP_cloud_*'] },
       move: slice(moves.pushIn({ from: 0.38, to: 0.3, height: 0.15, target: [0, 0.13, 0] }), 0.4, 1) },
 
     // 2 — spiral up from the cocoa cloud.
@@ -518,7 +564,7 @@ export default defineScene({
     // 9 — the frozen espresso arc, spout to cup; moka floating above.
     { name: 'SC09_arc', from: 625, to: 700, focalLength: 28, easing: 'linear',
       hero: ['PRP_cup', 'PRP_moka'],
-      occlusion: { ignore: [...FILLINGS, 'PRP_drop_*'] },
+      occlusion: { ignore: [...FILLINGS, 'PRP_drop_*', 'PRP_puff_*'] },
       move: moves.truck({ from: [0.5, 0.22, 0.34], to: [0.46, 0.22, 0.38],
                           target: [-0.04, 0.19, 0] }) },
 
