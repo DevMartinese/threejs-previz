@@ -33,11 +33,11 @@ function build({ ctx, geo }) {
     for (const p of ['torso', 'head', 'arms', 'legs'])
       ctx.part(`CHR_${c}_${p}`, f[p], c, rig);
   };
-  person('red', [1.45, 0.74, 0.4], 25, true);      // on the hood, legs over the side
-  person('cyan', [-0.5, 0.5, 0.35], 90, true);     // inside
-  person('yellow', [-0.5, 0.5, -0.35], 90, true);  // inside
-  person('green', [-2.95, 0, 0.7], 115, false);    // standing by the trunk
-  person('violet', [0.4, 0, 1.75], -35, false);    // leaning at the door
+  person('red', [1.45, 0.74, 0.45], 25, true);     // on the hood, legs over the side
+  person('cyan', [-0.35, 0.78, 0.38], 90, true);   // in the open cabin, riding high
+  person('yellow', [-0.75, 0.78, -0.38], 90, true);
+  person('green', [-3.3, 0, 1.5], 130, true);      // sitting on the ground by the trunk
+  person('violet', [2.2, 0, -2.1], -30, false);    // standing clear of the nose
 }
 
 export default defineScene({

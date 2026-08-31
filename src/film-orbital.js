@@ -14,4 +14,7 @@ export default defineFilm({
   id: 'orbital',
   scenes: [car, court, drift],
   mode: 'live',
+  // the dive-through demands it: boundary camera poses are measured, so the
+  // hard cut genuinely hides behind the surface
+  seams: true,
 });

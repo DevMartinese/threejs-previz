@@ -259,6 +259,20 @@ FAIL  feature  (515 frames)
 (A declared transition with no injected `TransitionSeries`/`linearTiming` is
 not a check — `filmComposition` throws at registration.)
 
+**The fifth film check — seam continuity.** For invisible cuts (a camera that
+dives through a surface and emerges in the next scene), declare
+`seams: true` on the film: the check poses each scene's own shot list at the
+boundary frames and MEASURES that the camera position, view direction and
+lens splice — `seam A -> B: camera jumps 0.306m / 1.8deg` names exactly how
+far the trajectory misses. The classic trap it exists for: shot ranges are
+half-open, so the last RENDERED frame is `to-1` — a move authored to end "at
+u=1" is one frame of trajectory short at the boundary unless its window is
+stretched by `n/(n-1)`. Share the trajectory itself between scenes (one
+recipe module both import) and let the check keep it honest; the hard cut
+then hides behind the surface — an old, honest editing trick, now measured.
+Works in `live`; in `stitch` the boundary is a video cut, so it only holds if
+the surface fills the frame at the cut.
+
 **Mismatched fps is the worst of them.** A stitched film plays every clip at the
 film's fps, so a 24 fps scene inside a 30 fps film runs fast *and* every cut after
 it lands early — a drift that compounds and looks like a timing mistake in the
