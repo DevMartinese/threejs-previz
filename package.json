@@ -7,9 +7,10 @@
   "scripts": {
     "studio": "remotion studio",
     "audit": "node lib/auditScenes.mjs src/scenes/*.js",
-    "render": "npm run audit && remotion render demo out/demo.mp4",
-    "still": "remotion still demo out/still.png --frame=60",
-    "frames": "npm run audit && remotion render demo out/frames --sequence"
+    "render": "npm run audit && remotion render roundtable out/roundtable.mp4",
+    "render:demo": "npm run audit && remotion render demo out/demo.mp4",
+    "still": "remotion still roundtable out/still.png --frame=180",
+    "frames": "npm run audit && remotion render roundtable out/frames --sequence"
   },
   "dependencies": {
     "@react-three/fiber": "^8.17.10",

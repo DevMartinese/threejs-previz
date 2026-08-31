@@ -59,7 +59,7 @@ export function sceneComponent(def) {
       <ThreeCanvas width={width} height={height}>
         <PrevizStage ctx={ctx} list={def.list} frame={frame}
                      visibility={def.visibility} subjectSize={def.subjectSize}
-                     filmGauge={def.filmGauge} />
+                     filmGauge={def.filmGauge} animate={def.animate} fps={def.fps} />
       </ThreeCanvas>
     );
   }
@@ -78,9 +78,16 @@ export function sceneComposition(def) {
  * there is no separate preview layer.
  */
 export function PrevizStage({ ctx, list, frame, visibility = [],
-                              subjectSize = 1, filmGauge = 36 }) {
+                              subjectSize = 1, filmGauge = 36,
+                              animate = null, fps = 30 }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
+  const rootScene = useThree((s) => s.scene);
+
+  // The blocking scene's own background does not render from a nested scene.
+  useLayoutEffect(() => {
+    rootScene.background = ctx.scene.background;
+  }, [rootScene, ctx]);
 
   useLayoutEffect(() => {
     // Scale-correct the lens first: the default 0.1 near plane slices straight
@@ -95,16 +102,18 @@ export function PrevizStage({ ctx, list, frame, visibility = [],
 
   useLayoutEffect(() => {
     if (visibility.length) blk.applyVisibility(ctx.scene, visibility, frame);
+    // Object animation is a pure function of the frame, same contract as the
+    // camera: animate({ ctx, frame }) poses everything from scratch, no state.
+    if (animate) animate({ ctx, frame, fps });
     applyFrame(camera, list, frame);
-  }, [camera, ctx, list, frame, visibility]);
+  }, [camera, ctx, list, frame, visibility, animate, fps]);
 
-  return (
-    <>
-      {Object.values(ctx.groups).map((g) => (
-        <primitive key={g.name} object={g} />
-      ))}
-    </>
-  );
+  // Mount the WHOLE blocking scene as one primitive, never group by group:
+  // R3F's <primitive> REPARENTS what it mounts, and mounting the groups
+  // individually silently empties ctx.scene — every ctx.get()/applyVisibility
+  // that runs after mount then searches a hollow scene. Mounting ctx.scene
+  // itself reparents only the scene object; its children stay put.
+  return <primitive object={ctx.scene} />;
 }
 
 /** Register several scenes at once. */
