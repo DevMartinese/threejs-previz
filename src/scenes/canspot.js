@@ -41,10 +41,14 @@ const identity = {
 
 /* The can slices and the fruit halves touch their siblings by construction —
  * the split animation opens and closes those exact contacts. Declared per
- * object so a slice hitting anything else still counts. */
+ * object so a slice hitting anything else still counts. The clones OVERLAP
+ * the main can while emerging: they are born inside it and slide out of its
+ * silhouette (fan and reveal), which is the point of the shot — clones come
+ * out of the can, they don't spawn beside it. Contact by design, declared. */
 const ignore = [
   ['PRP_canS_*', 'PRP_canS_*'],
   ['PRP_can', 'PRP_can_lid'],
+  ['PRP_can', 'PRP_clone_*'],
   ['PRP_fruitS_rasp_*', 'PRP_fruitS_rasp_*'],
   ['PRP_fruitS_lime_*', 'PRP_fruitS_lime_*'],
 ];
@@ -81,7 +85,9 @@ function build({ ctx, geo, blk }) {
   fruit('rasp', 'raspberry', 0.016);
   fruit('lime', 'lime', 0.018);
 
-  for (const c of CLONES) ctx.part(`PRP_clone_${c}`, canGeo(), c);
+  // A hair smaller than the original: while a clone is still inside the can
+  // their walls would otherwise be coplanar and z-fight during the emergence.
+  for (const c of CLONES) ctx.part(`PRP_clone_${c}`, canGeo(), c).scale.setScalar(0.94);
 
   const glassMat = ctx.material('glass');
   glassMat.transparent = true;
@@ -220,13 +226,13 @@ function animate({ ctx, frame }) {
       const out = ramp(f, 10 + i * 12, 22, easings.easeOutCubic);
       const back = ramp(f, 70 + i * 8, 14, easings.easeInOutCubic);
       const k = out * (1 - back);
-      if (k < 0.03) return;
-      // Radial in, radial out: each clone slides along its own ray from a
-      // hiding radius to the fan — staggered paths that share one origin
-      // cross each other, and crossing paths is how clones collide.
-      const [ox, , oz] = polarXZ(FAN_ANGLES[i], 0.075);
+      if (k <= 0) return;
+      // Each clone is born at the can's own position and slides out of its
+      // silhouette along its own ray — clones come OUT of the can, they
+      // don't spawn beside it. Radial paths never cross each other; the
+      // overlap with the main can during emergence is declared in `ignore`.
       const [tx, , tz] = polarXZ(FAN_ANGLES[i], FAN_R);
-      show(`PRP_clone_${c}`, [lerp(ox, tx, k), 0.05, lerp(oz, tz, k)]);
+      show(`PRP_clone_${c}`, [tx * k, HOVER, tz * k]);
     });
   }
 
@@ -290,17 +296,17 @@ function animate({ ctx, frame }) {
   }
 
   if (name === 'reveal') {
-    const can = show('PRP_can', [0, lerp(0.1, 0.15, ramp(f, 0, 40, easings.easeOutCubic)), 0]);
+    const canY = lerp(0.1, 0.15, ramp(f, 0, 40, easings.easeOutCubic));
+    const can = show('PRP_can', [0, canY, 0]);
     can.rotation.y = rad(3) * f;
     CLONES.forEach((c, i) => {
       const bloom = ramp(f, 8 + i * 7, 16, easings.easeOutCubic);
-      if (bloom < 0.03) return;
-      // Radial bloom (see the fan cut): the audit caught orange crossing
-      // raspberry's path when they bloomed from one shared origin.
-      const [ox, , oz] = polarXZ(FAN_ANGLES[i], 0.075);
+      if (bloom <= 0) return;
+      // Born inside the rising can, blooming out of it radially — same
+      // emergence contract as the fan cut.
       const [tx, , tz] = polarXZ(FAN_ANGLES[i], 0.19);
       show(`PRP_clone_${c}`,
-        [lerp(ox, tx, bloom), lerp(0.05, 0.1 + i * 0.012, bloom), lerp(oz, tz, bloom)]);
+        [tx * bloom, lerp(canY, 0.1 + i * 0.012, bloom), tz * bloom]);
     });
   }
 
