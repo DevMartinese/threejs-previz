@@ -1,0 +1,25 @@
+{
+  "name": "threejs-previz",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cinematic previz in code: Three.js blocking scenes, a camera-move catalog, measured audits, and deterministic Remotion renders — motion references for generative video models.",
+  "scripts": {
+    "studio": "remotion studio",
+    "audit": "node lib/auditScenes.mjs src/scenes/*.js",
+    "render": "npm run audit && remotion render demo out/demo.mp4",
+    "still": "remotion still demo out/still.png --frame=60",
+    "frames": "npm run audit && remotion render demo out/frames --sequence"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.17.10",
+    "@remotion/cli": "^4.0.0",
+    "@remotion/three": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0",
+    "three": "0.185.0",
+    "three-bvh-csg": "0.0.18",
+    "three-mesh-bvh": "0.9.14"
+  }
+}

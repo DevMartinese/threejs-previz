@@ -1,0 +1,186 @@
+---
+name: remotion-previz-render
+description: >-
+  Render a Three.js / react-three-fiber blocking scene as a Remotion composition:
+  project structure, deriving `<Composition>` props from the shot list so duration
+  never drifts, the frame-determinism rules that `<ThreeCanvas>` requires
+  (useCurrentFrame only, never useFrame; explicit width/height; Sequence
+  layout="none"), building the scene once per worker instead of per frame, a
+  headless audit gate that blocks a render when a shot cuts the hero off, and the
+  render commands for MP4, image sequences and stills, and composing several
+  scenes into a longer film — stitched from pre-rendered clips or mounted live,
+  with transition arithmetic and cross-scene consistency checks. Use this skill when the
+  user wants to turn a Three/R3F previz or animatic into a video file, asks how to
+  wire Three.js into Remotion, hits flickering or drift between the Remotion Studio
+  preview and the rendered output, needs a motion reference exported for a
+  generative video model, or is setting up the project structure for
+  code-generated video; or wants to join several scenes into one longer piece and
+  keep each independently renderable. Trigger also for "render the animatic",
+  "export the previz to mp4", "remotion three setup", "why does my 3D scene
+  flicker when rendering", "stitch the scenes together", "make it a longer film".
+---
+
+# Remotion Previz Render
+
+Turn a blocking scene into a video file. This skill owns the **output layer**:
+project structure, composition wiring, render-time determinism, and the gate that
+stops a bad shot from becoming a render.
+
+The scene comes from **blocking-scenes**, the camera paths from **camera-moves**.
+Both ship in this plugin and share `lib/`.
+
+## The one structural idea
+
+**The shot list is the single source of truth.** It already knows how many frames
+the piece runs; the scene already knows its aspect. Restating `durationInFrames`
+in `<Composition>` is how the two drift apart — you extend a shot, forget the
+composition, and the render stops mid-move with no error and no warning.
+
+`defineScene()` derives all of it:
+
+```js
+// src/scenes/roundtable.js  — plain JS, so the audit gate can load it in Node
+import { defineScene } from '../../lib/scene.js';
+import { moves, reframe } from '../../lib/cameraMoves.js';
+
+export default defineScene({
+  id: 'roundtable',
+  fps: 30, height: 1080, aspect: 21 / 9, subjectSize: 2.5,
+  identity: { grey: '#9a9a9a', wood: '#8a6136' },
+  ignore: [['PRP_chair_*', 'CHR_*']],
+
+  build: ({ ctx, geo }) => {
+    ctx.part('ENV_floor', geo.disc({ radius: 8 }), 'grey', ctx.groups.ENV);
+    ctx.part('PRP_table', geo.table({ radius: .9 }), 'wood', ctx.groups.PRP);
+  },
+
+  shots: [
+    { name: 'SC01_wide', from: 0, to: 450, focalLength: 28, hero: 'PRP_table',
+      easing: 'easeInOutSine',
+      move: reframe(moves.turntable({ radius: 5, pushIn: .95, target: [0, 0, 0] }),
+                    { center: [0, .7, 0] }) },
+  ],
+});
+```
+
+```jsx
+// src/Root.tsx
+import { Composition } from 'remotion';
+import { sceneComposition } from '../lib/remotion.jsx';
+import roundtable from './scenes/roundtable.js';
+
+export const RemotionRoot = () => (
+  <Composition {...sceneComposition(roundtable)} />
+);
+```
+
+`sceneComposition()` merges the derived metadata — `id`, `fps`, `width`, `height`,
+`durationInFrames` — with the React component. Nothing is typed twice.
+
+**Why the split between `scene.js` and `remotion.jsx`:** the audit gate has to
+import a *real* scene file in plain Node. If `defineScene` lived in a `.jsx` that
+pulls in React and Remotion, `node auditScenes.mjs` could not load it, and the
+gate could only ever check a hand-written stub — worthless, because the thing you
+render would never be the thing you checked. So the definition is plain JS and the
+component is separate.
+
+## How to use this skill
+
+1. **Read `references/remotion-pipeline.md`.** Project layout, the determinism
+   rules and what each one prevents, the render commands, and the failure modes
+   that produce *plausible but wrong* output rather than an error.
+
+2. **Define each scene with `defineScene()`** from `lib/scene.js`. `build()`
+   populates the standard groups; `shots` is the timeline. Both are plain data.
+
+3. **Compose scenes into a film with `defineFilm()`** when the piece is longer
+   than one scene. It derives the duration, including the transition subtraction,
+   and checks the things that fail silently between scenes.
+
+4. **Gate the render on the audit.** `lib/auditScenes.mjs` runs the collision,
+   framing and floor audits headlessly — no browser, no GPU, because they are
+   bounding boxes, BVH intersections and NDC projection. It exits non-zero on
+   failure, so `npm run audit && remotion render …` refuses to render a shot that
+   cuts the hero off. Measured: about 100 ms for a scene that takes minutes to
+   render.
+
+5. **Render.** `npx remotion render <id> out/<id>.mp4`, or a PNG sequence when the
+   output is a motion reference and you want frame-exact control.
+
+## Scenes and films
+
+A **scene** is a unit of work: build it, audit it, render it, stop thinking about
+it. A **film** is an *edit* of scenes. Keeping them apart is what lets you change
+scene 3 without re-rendering the other five.
+
+```js
+export default defineFilm({
+  id: 'feature',
+  scenes: [intro, roundtable, outro],
+  mode: 'stitch',                          // or 'live'
+  transitions: { intro: { frames: 15 } },  // keyed by the scene it comes AFTER
+});
+```
+
+Two modes, and the choice matters more than it looks:
+
+- **`stitch`** (default) — each scene is already rendered to a file; the film
+  references them with `<OffthreadVideo>`. Change one scene, re-render only that
+  scene, re-stitch in seconds. This is how a real edit works: you cut negatives
+  that are already developed.
+- **`live`** — the film mounts each scene's component in a `<Sequence>` and
+  renders in one pass. No intermediate files, but every scene rebuilds its
+  geometry, a WebGL context is mounted and torn down per scene, and any change
+  re-renders everything. Fine for two or three short scenes.
+
+Start `live` while the piece is short and you are still moving cuts; switch to
+`stitch` when the render starts to hurt.
+
+**Transitions shorten the film.** `<TransitionSeries>` renders both scenes during
+a transition and subtracts its length from the total: two 100-frame scenes with a
+30-frame dissolve make **170** frames, not 200 and not 230. `defineFilm` does that
+arithmetic, and `film.timeline` gives you where each scene starts.
+
+Register scenes *and* the film so both stay renderable:
+
+```jsx
+{[...film.scenes, film].map((c) => <Composition key={c.id} {...c.compositionProps} />)}
+```
+
+## The four rules `<ThreeCanvas>` enforces
+
+Violating any of these gives flickering or a preview that does not match the
+render — not an error message.
+
+- **`useCurrentFrame()` only. `useFrame()` is forbidden.** During rendering
+  `<ThreeCanvas>` pins `frameloop` to `never`; anything animating on its own clock
+  either freezes or tears.
+- **`<ThreeCanvas>` needs explicit `width` and `height`**, from `useVideoConfig()`.
+- **Any `<Sequence>` inside the canvas needs `layout="none"`** — its default `div`
+  wrapper is not valid inside a canvas.
+- **Nothing may hold state between frames.** Remotion renders frames out of order
+  across parallel workers. No accumulation, no `Math.random()` — the seeded `rng`
+  in `geometry.js` exists for this.
+
+## Build once, not per frame
+
+`build()` runs **once per worker**, inside `useMemo`, never per frame. CSG cuts,
+`mergeGeometries` and BVH construction are build-time work; running them per frame
+is both slow and a determinism hazard, since a boolean re-evaluated per frame can
+produce marginally different triangles.
+
+The camera is the only thing recomputed each frame, and it is a pure function:
+`applyFrame(camera, shots, frame)` — same frame in, same camera out, in any order,
+in any worker.
+
+## Files
+
+- `references/remotion-pipeline.md` — project layout, determinism rules and what
+  each prevents, the audit gate, render commands, output settings for a motion
+  reference, and the failure modes. Has a table of contents.
+- `lib/scene.js` — `defineScene()`. Plain JS: the audit gate loads it in Node.
+- `lib/remotion.jsx` — `sceneComponent()`, `sceneComposition()`, `<PrevizStage>`.
+- `lib/film.jsx` — `defineFilm()`, stitch/live modes, transition arithmetic,
+  `film.timeline`, cross-scene checks.
+- `lib/auditScenes.mjs` — the headless gate, for scenes and films alike.
+  `--samples=N`, `--json`, `--quiet`.

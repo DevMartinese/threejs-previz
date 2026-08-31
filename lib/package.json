@@ -1,0 +1,4 @@
+{
+  "type": "module",
+  "//": "This folder is copied into a project, not installed from npm. The only field that does anything is `type`, which tells Node the .js files here are ES modules — without it the audit gate cannot run. Install the peers in YOUR project: three, three-mesh-bvh, three-bvh-csg, and (for rendering) remotion, @remotion/three, @react-three/fiber, react."
+}

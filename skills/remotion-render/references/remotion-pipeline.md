@@ -1,0 +1,310 @@
+# Remotion Previz Pipeline
+
+How a blocking scene becomes a video file, and the handful of rules that decide
+whether the render matches what you saw in the preview.
+
+## Table of contents
+
+1. [Project layout](#1-project-layout)
+2. [Install](#2-install)
+3. [The composition derives from the shot list](#3-the-composition-derives-from-the-shot-list)
+4. [Determinism at render time](#4-determinism-at-render-time)
+5. [Build once, not per frame](#5-build-once-not-per-frame)
+6. [The audit gate](#6-the-audit-gate)
+7. [Films: joining scenes](#7-films-joining-scenes)
+8. [Rendering](#8-rendering)
+9. [Output for a video model](#9-output-for-a-video-model)
+10. [Failure modes](#10-failure-modes)
+
+---
+
+## 1. Project layout
+
+```
+project/
+├── remotion.config.ts
+├── package.json
+├── lib/                        the plugin runtime — one copy, shared
+│   ├── cameraMoves.js          the path
+│   ├── blocking.js             the scene
+│   ├── geometry.js             the shapes
+│   ├── shots.js                the timeline
+│   ├── scene.js                defineScene — plain JS, Node can load it
+│   ├── remotion.jsx            sceneComponent + <PrevizStage>
+│   └── auditScenes.mjs         the gate
+├── src/
+│   ├── Root.tsx                registers the compositions
+│   └── scenes/
+│       ├── roundtable.js       one file per piece: build + shots
+│       └── tiramisu.js
+└── out/
+```
+
+One file per scene, exporting a `defineScene()` result as default — and importing
+from `scene.js`, **not** from `remotion.jsx`. That keeps the scene file loadable by
+plain Node, which is what makes the audit gate able to check the real thing rather
+than a stub. `Root.tsx` adds the component with `sceneComposition()`.
+
+## 2. Install
+
+```bash
+npx remotion add @remotion/three          # pins a compatible version
+npm i three three-mesh-bvh three-bvh-csg
+```
+
+`remotion add` is preferable to a plain `npm install` because it matches the
+package version to your Remotion version, and pulls `@react-three/fiber` and
+`three` as peers.
+
+In `remotion.config.ts`, set the OpenGL renderer — new projects include it, older
+ones may not:
+
+```ts
+Config.setChromiumOpenGlRenderer('angle');
+```
+
+## 3. The composition derives from the shot list
+
+```jsx
+import { Composition } from 'remotion';
+import roundtable from './scenes/roundtable.js';
+
+export const RemotionRoot = () => <Composition {...roundtable.compositionProps} />;
+```
+
+`compositionProps` is `{ id, component, fps, width, height, durationInFrames }`,
+and `durationInFrames` comes from `shots.duration`. **Do not restate it.** The
+failure it prevents is quiet: extend a shot's `to`, forget the composition, and
+the render simply stops mid-move — no error, no warning, just a video that ends
+early. Deriving it makes that impossible.
+
+`width` is derived from `height × aspect`, so a 21:9 piece at 1080 is 2520 × 1080
+without arithmetic in two places.
+
+For several scenes:
+
+```jsx
+{[roundtable, tiramisu].map((s) => <Composition key={s.id} {...s.compositionProps} />)}
+```
+
+## 4. Determinism at render time
+
+Remotion renders frames **out of order, across parallel workers**. Four rules
+follow, and violating any of them produces flicker or a preview that disagrees
+with the render — never an error message.
+
+**`useCurrentFrame()` only; `useFrame()` is forbidden.** During rendering
+`<ThreeCanvas>` pins `frameloop` to `'never'` and draws on demand. Anything
+animating on its own clock freezes, tears, or drifts between preview and output.
+`<PrevizStage>` reads the frame once and passes it to `applyFrame`.
+
+**`<ThreeCanvas>` needs explicit `width` and `height`** from `useVideoConfig()`.
+The Studio applies a scale transform to the canvas and a browser bug breaks the
+layout without them.
+
+**`<Sequence>` inside the canvas needs `layout="none"`.** Its default `div`
+wrapper is not valid inside a canvas.
+
+**No state between frames.** No accumulation (`position.x += v`), no
+`Math.random()` — `geometry.js` ships a seeded `rng` precisely so scatter and
+debris land identically in every worker on every render.
+
+If you update a texture asynchronously (from an `<OffthreadVideo>` callback, say),
+call `advance(performance.now())` rather than `invalidate()`, so the scene
+re-renders synchronously before the frame is captured.
+
+## 5. Build once, not per frame
+
+`sceneComponent(def)` runs `def.make()` inside a `useMemo` with no dependencies —
+**once per worker**, never per frame.
+
+This matters more than it looks. CSG cuts, `mergeGeometries` and BVH construction
+are build-time work; doing them per frame is slow *and* a determinism hazard,
+because a boolean re-evaluated repeatedly can produce marginally different
+triangles at the seams. Build the geometry once, then move only the camera.
+
+The camera is the sole per-frame computation, and it is pure:
+
+```js
+applyFrame(camera, shots, frame);   // same frame -> same camera, any order, any worker
+```
+
+Visibility spans are the other per-frame value, and they are resolved the same
+way: `applyVisibility(scene, spans, frame)`, not a toggle you mutate once.
+
+## 6. The audit gate
+
+```json
+{
+  "scripts": {
+    "audit":  "node lib/auditScenes.mjs src/scenes/*.js",
+    "render": "npm run audit && remotion render roundtable out/roundtable.mp4"
+  }
+}
+```
+
+`auditScenes.mjs` imports every scene module, runs the collision / framing / floor
+audits across all shots, prints a report and **exits non-zero on failure**, so the
+`&&` refuses to start a render that would waste minutes on a shot that cuts the
+hero off.
+
+It needs no browser and no GPU: every audit is bounding boxes, BVH intersection
+and NDC projection — plain maths. Measured on the round-table scene, 450 frames,
+six samples per shot:
+
+```
+PASS  roundtable  (450 frames, audited in 101ms)
+  ok   SC01_wide [0-450)  framing 0.000 [hero PRP_table]
+
+FAIL  tooclose  (450 frames, audited in 42ms)
+  FAIL SC01_wide [0-450)  framing 0.893 [hero PRP_table] <PRP_table @f269>
+
+1 of 2 scene(s) failed — not safe to render.
+```
+
+A hundred milliseconds against a render measured in minutes. Flags: `--samples=N`
+(default 6), `--json` for CI, `--quiet` to print only failures.
+
+The report names the **frame** and the **object**, which is usually enough to fix
+it without opening the Studio.
+
+## 7. Films: joining scenes
+
+A scene is a unit of work; a film is an edit of scenes. They are separate
+compositions so that changing one scene does not invalidate the rest.
+
+```js
+// src/film.js
+export default defineFilm({
+  id: 'feature',
+  scenes: [intro, roundtable, outro],
+  mode: 'stitch',
+  transitions: { intro: { frames: 15, presentation: fade() } },
+  TransitionSeries,                 // from @remotion/transitions
+});
+```
+
+### stitch vs live
+
+| | `stitch` | `live` |
+|---|---|---|
+| scene source | pre-rendered file via `<OffthreadVideo>` | the scene's own component |
+| intermediate files | yes, one per scene | none |
+| change one scene | re-render that scene, re-stitch (seconds) | re-render the whole film |
+| WebGL contexts | one, for nothing — it is just video | one per scene, mounted and torn down |
+| good for | anything longer than a couple of scenes | short pieces still being cut |
+
+The render order for `stitch` is scenes first, film last:
+
+```json
+"scripts": {
+  "audit":        "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
+  "render:scenes": "remotion render intro public/intro.mp4 && remotion render roundtable public/roundtable.mp4",
+  "render:film":   "remotion render feature out/feature.mp4",
+  "render":        "npm run audit && npm run render:scenes && npm run render:film"
+}
+```
+
+Scene renders go to `public/` because `staticFile()` reads from there.
+
+### The transition arithmetic
+
+`<TransitionSeries>` renders both scenes during a transition and **shortens the
+total by the transition length**:
+
+```
+100 + 100 - 30 = 170     two scenes, one 30-frame dissolve
+120 + 450 + 20 - 15 - 60 = 515
+```
+
+`defineFilm` computes it. Doing it by hand is the most common off-by-N in a
+Remotion edit, and it fails quietly — the film is simply shorter than the number
+you typed.
+
+Two API details worth knowing: a transition declared after the **last** scene is
+ignored, and `TransitionSeries.Sequence` must **not** be given `layout="none"` —
+that is deprecated and throws from Remotion 5, because transition scenes have to
+stay absolutely positioned. (This is the opposite of a plain `<Sequence>` *inside*
+a `<ThreeCanvas>`, which does need it.)
+
+### What the film-level checks catch
+
+All of these fail *silently* at render time — the film comes out wrong rather than
+erroring — which is why `auditScenes.mjs` asserts them:
+
+```
+FAIL  feature  (515 frames)
+  FAIL table: fps 24 != film fps 30 — timing will drift
+  FAIL outro: 1920x1080 != film 2520x1080 — will letterbox or crop
+  FAIL transition after "table": 60 frames is >= the shortest adjacent scene (20)
+  FAIL transition after "intro": pass TransitionSeries from @remotion/transitions,
+       or it will be ignored
+```
+
+**Mismatched fps is the worst of them.** A stitched film plays every clip at the
+film's fps, so a 24 fps scene inside a 30 fps film runs fast *and* every cut after
+it lands early — a drift that compounds and looks like a timing mistake in the
+animation rather than a configuration one.
+
+## 8. Rendering
+
+```bash
+npx remotion studio                                   # scrub, check the cuts
+npx remotion render roundtable out/roundtable.mp4     # the video
+npx remotion still roundtable out/f120.png --frame=120
+npx remotion render roundtable out/frames --sequence  # PNG sequence
+```
+
+`remotion studio` is the equivalent of scrubbing the timeline: it is where you
+judge whether the cuts land, which is a question no audit can answer.
+
+## 9. Output for a video model
+
+When the render is a **motion reference** rather than a deliverable, a few
+settings matter more than quality:
+
+- **Frame-exactness beats bitrate.** The whole value of the reference is that
+  motion and timing are exactly what you designed; a model asked to match it
+  one-to-one will inherit any drift. A PNG sequence removes the question
+  entirely, at the cost of disk.
+- **Keep the aspect the model expects.** A 21:9 reference letterboxed into 16:9
+  teaches the model to generate the letterbox.
+- **Keep the flat identity colours.** They are the reference's semantics: this
+  band is soaked biscuit, that one is cream, this character is cyan. Adding
+  materials or lighting before the render actively removes information the model
+  uses.
+- **Render at the target resolution.** Upscaling a reference softens the edges
+  that carry the staging.
+
+## 10. Failure modes
+
+**The video ends before the last shot.** `durationInFrames` was restated by hand
+and drifted from the shot list. Use `compositionProps`.
+
+**The preview looks right, the render flickers.** Something is animating outside
+`useCurrentFrame()` — a `useFrame`, a clock, an accumulated value, or a
+`Math.random()` in the scene build.
+
+**Geometry disappears at close range, or glass never appears.** The camera's near
+plane. The default 0.1 slices through a product-scale scene; `defineScene`'s
+`subjectSize` sets it to roughly 5% of the subject. The symptom looks like broken
+geometry, which sends people to the modelling instead of the camera.
+
+**The framing is subtly high or low.** `reframe` offsets both position *and*
+target, so the move's own default target is added to `center` rather than replaced
+by it. Zero the move's target when you plan to reframe it.
+
+**Everything collides with the floor.** The audit is being run on all meshes
+instead of on subjects. Scenery belongs to `ENV` and is excluded by default;
+intentional contact is declared with wildcards, `ignore: [['PRP_chair_*','CHR_*']]`.
+
+**The film is shorter than the sum of its scenes.** That is transitions doing
+their job. `defineFilm` reports `sceneFrames`, `transitionFrames` and the total
+separately so the number is never a surprise.
+
+**A stitched scene plays fast and every later cut lands early.** Mismatched fps
+between that scene and the film. The film-level check catches it.
+
+**An over-the-shoulder shot fails the framing audit.** It is being measured
+against every subject, and in an OTS the rest of the cast is *supposed* to leave
+frame. Give the shot a `hero`.
