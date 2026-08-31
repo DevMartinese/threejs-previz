@@ -12,7 +12,7 @@
  * palette is the cast list.
  */
 import { defineScene } from '../../lib/scene.js';
-import { moves, retarget } from '../../lib/cameraMoves.js';
+import { moves, retarget, handheld, drift, slice } from '../../lib/cameraMoves.js';
 
 /* ---------------------------------------------------------------- layout --
  * Seats every 60°, assigned so that every over-the-shoulder pair in the shot
@@ -120,6 +120,22 @@ const otsCrawl = (behind, { offset = 12, crawl = 3, r = 2.05, y = 0.92 } = {}) =
   return { from: polar(a, r, y), to: polar(a + crawl, r, y) };
 };
 
+/* Real handheld, not wiggle: a lazy body sway in long waves on the camera plus
+ * a very small tremor, and on the target a slow drift with breathing — the
+ * operator's body and the operator's attention as separate layers. `seconds`
+ * is the shot length, so the wave frequencies read in Hz. No fast jitter
+ * anywhere: the sway sits at ~0.2 Hz, the tremor at ~1.5 Hz and millimetres. */
+const alive = (move, seconds, { sway = 0.018, driftAmp = 0.012, breathe = 0.008,
+                                tremor = 0.003 } = {}) =>
+  handheld(
+    handheld(
+      drift(move, { duration: seconds, amp: driftAmp, freq: 0.16,
+                    breathe, breatheFreq: 0.24 }),
+      { duration: seconds, posAmp: sway, rotAmp: 0.006, freq: 0.2 },
+    ),
+    { duration: seconds, posAmp: tremor, rotAmp: 0.002, freq: 1.5 },
+  );
+
 export default defineScene({
   id: 'roundtable',
   fps: 24,
@@ -143,21 +159,26 @@ export default defineScene({
       // was the WHOLE table, pedestal base included, and no orbit that looks
       // at faces keeps the floor in frame. The real statement is "the
       // tabletop always in frame", hence hero PRP_table_top.
-      move: retarget(
-        moves.orbit360({ radius: 3.0, height: 1.2, startAngle: 0, arc: rad(110) }),
-        { targets: [headPos('yellow'), headPos('blue'), headPos('green')] },
+      // Handheld a touch livelier here than in the dialogue cuts.
+      move: alive(
+        retarget(
+          moves.orbit360({ radius: 3.0, height: 1.2, startAngle: 0, arc: rad(110) }),
+          { targets: [headPos('yellow'), headPos('blue'), headPos('green')] },
+        ),
+        15, { sway: 0.032, driftAmp: 0.045, breathe: 0.014, tremor: 0.0045 },
       ) },
 
     // 2 — cyan over blue's shoulder, ~3 s. Below shoulder height, barely
-    // crawling sideways. Everyone else is supposed to leave frame: hero cyan.
+    // crawling sideways, handheld completely lazy. Everyone else is supposed
+    // to leave frame: hero cyan.
     { name: 'SC02_ots_cyan', from: 360, to: 432, focalLength: 55, easing: 'linear',
       hero: 'CHR_cyan_head',
-      move: moves.truck({ ...otsCrawl('blue'), target: headPos('cyan') }) },
+      move: alive(moves.truck({ ...otsCrawl('blue'), target: headPos('cyan') }), 3) },
 
     // 3 — red over yellow's shoulder, 2.5 s, crawling the same way.
     { name: 'SC03_ots_red', from: 432, to: 492, focalLength: 55, easing: 'linear',
       hero: 'CHR_red_head',
-      move: moves.truck({ ...otsCrawl('yellow'), target: headPos('red') }) },
+      move: alive(moves.truck({ ...otsCrawl('yellow'), target: headPos('red') }), 2.5) },
 
     // 4 — purple over green's shoulder, long. Halfway through, the gaze slides
     // along the eyeline to cyan without a cut and ends there. ONE continuous
@@ -175,19 +196,27 @@ export default defineScene({
     // head inside the bottom of frame; on a 50 it drops out. Offsetting to a
     // low shoulder instead swings green out of frame as the gaze slides, and
     // red's arm crosses in front of cyan — both checked, both worse.
-    { name: 'SC04a_ots_purple', from: 492, to: 606, focalLength: 40, easing: 'linear',
-      hero: 'CHR_purple_head',
-      move: moves.truck({ ...otsCrawl('green', { offset: -13, crawl: 1, r: 2.13, y: 1.5 }),
-                          target: headPos('purple') }) },
-    { name: 'SC04b_slide', from: 606, to: 663, focalLength: 40, easing: 'linear',
-      hero: [],
-      move: retarget(
-        moves.truck(otsCrawl('green', { offset: -12, crawl: 0.5, r: 2.13, y: 1.5 })),
-        { targets: [headPos('purple'), headPos('cyan')] },
-      ) },
-    { name: 'SC04c_end_cyan', from: 663, to: 720, focalLength: 40, easing: 'linear',
-      hero: 'CHR_cyan_head',
-      move: moves.truck({ ...otsCrawl('green', { offset: -11.5, crawl: 0.5, r: 2.13, y: 1.5 }),
-                          target: headPos('cyan') }) },
+    // The whole cut is ONE move — crawl, gaze waypoints (hold purple, slide,
+    // hold cyan, matching the three entries exactly) and the handheld layers
+    // share a single time base, then each entry plays its slice. That is what
+    // keeps the entry boundaries invisible: the noise never restarts.
+    ...(() => {
+      const whole = alive(
+        retarget(
+          moves.truck(otsCrawl('green', { offset: -13, crawl: 2, r: 2.13, y: 1.5 })),
+          { targets: [headPos('purple'), headPos('purple'),
+                      headPos('cyan'), headPos('cyan')] },
+        ),
+        9.5, { sway: 0.016, driftAmp: 0.01, breathe: 0.009, tremor: 0.0025 },
+      );
+      return [
+        { name: 'SC04a_ots_purple', from: 492, to: 568, focalLength: 40,
+          easing: 'linear', hero: 'CHR_purple_head', move: slice(whole, 0, 1 / 3) },
+        { name: 'SC04b_slide', from: 568, to: 644, focalLength: 40,
+          easing: 'linear', hero: [], move: slice(whole, 1 / 3, 2 / 3) },
+        { name: 'SC04c_end_cyan', from: 644, to: 720, focalLength: 40,
+          easing: 'linear', hero: 'CHR_cyan_head', move: slice(whole, 2 / 3, 1) },
+      ];
+    })(),
   ],
 });
