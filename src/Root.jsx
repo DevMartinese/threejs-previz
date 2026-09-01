@@ -11,6 +11,7 @@ import canspot from './scenes/canspot.js';
 import tiramisu from './scenes/tiramisu.js';
 import feature, { stitched } from './film.js';
 import orbital from './scenes/orbital.js';
+import floors from './scenes/floors.js';
 
 // One <Composition> per scene and per film. Everything — id, fps, size,
 // durationInFrames — is derived from the definitions; nothing is restated.
@@ -26,6 +27,7 @@ export const RemotionRoot = () => (
     <Composition {...sceneComposition(tiramisu)} />
     <Composition {...sceneComposition(demo)} />
     <Composition {...sceneComposition(orbital)} />
+    <Composition {...sceneComposition(floors)} />
     <Composition {...filmComposition(feature, transitionKit)} />
     <Composition {...filmComposition(stitched, transitionKit)} />
   </>
