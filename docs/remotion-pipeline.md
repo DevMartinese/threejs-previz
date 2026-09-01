@@ -50,11 +50,11 @@ than a stub. `Root.tsx` adds the component with `sceneComposition()`.
 ## 2. Install
 
 ```bash
-npx remotion add @remotion/three          # pins a compatible version
-npm i three three-mesh-bvh three-bvh-csg
+pnpm dlx remotion add @remotion/three          # pins a compatible version
+pnpm add three three-mesh-bvh three-bvh-csg
 ```
 
-`remotion add` is preferable to a plain `npm install` because it matches the
+`remotion add` is preferable to a plain `pnpm add` because it matches the
 package version to your Remotion version, and pulls `@react-three/fiber` and
 `three` as peers.
 
@@ -139,8 +139,8 @@ way: `applyVisibility(scene, spans, frame)`, not a toggle you mutate once.
 ```json
 {
   "scripts": {
-    "audit":  "node lib/auditScenes.mjs src/scenes/*.js",
-    "render": "npm run audit && remotion render roundtable out/roundtable.mp4"
+    "audit:scenes": "node lib/auditScenes.mjs src/scenes/*.js",
+    "render": "pnpm audit:scenes && remotion render roundtable out/roundtable.mp4"
   }
 }
 ```
@@ -215,10 +215,10 @@ The render order for `stitch` is scenes first, film last:
 
 ```json
 "scripts": {
-  "audit":        "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
+  "audit:scenes": "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
   "render:scenes": "remotion render intro public/intro.mp4 && remotion render roundtable public/roundtable.mp4",
   "render:film":   "remotion render feature out/feature.mp4",
-  "render":        "npm run audit && npm run render:scenes && npm run render:film"
+  "render":        "pnpm audit:scenes && pnpm render:scenes && pnpm render:film"
 }
 ```
 

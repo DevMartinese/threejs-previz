@@ -133,6 +133,21 @@ export function InspectorStage({ def, frame, mode = 'free', show = {} }) {
   const { camera, gl, scene, size } = useThree();
   const ctx = useMemo(() => def.make(), [def]);
 
+  // Switching scenes builds a whole new context; without this the old one's
+  // buffers stay on the GPU. Measured on tiramisu: 115 geometries and 17
+  // materials leaked per switch. Remotion never hits this (one build per
+  // worker, then the process ends) — an interactive viewer does, every time
+  // you change the dropdown.
+  useEffect(() => () => {
+    ctx.scene.traverse((o) => {
+      if (o.isMesh) {
+        o.geometry?.dispose();
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) m?.dispose();
+      }
+    });
+  }, [ctx]);
+
   const shotCam = useMemo(() => {
     const c = new PerspectiveCamera(45, def.width / def.height,
       nearFor(def.subjectSize), Math.max(100, def.subjectSize * 1e4));

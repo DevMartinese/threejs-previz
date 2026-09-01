@@ -76,7 +76,8 @@ target   = subject center
 **Higgsfield:** FLOAT SPIN. The *subject* rotates 360° in place; the camera is
 static. This is an **object** animation, not a camera move — the "move" here
 returns a constant camera and instead drives a target object's `rotation.y`.
-The module exposes it as `floatSpin(object)` rather than a camera `f(u)`.
+The module exposes it as `floatSpin(object, t)` where `t` is `frame / fps` —
+absolute, never accumulated, so it survives out-of-order rendering.
 - **Easing:** `linear`.
 - **Duration:** 4–6 s.
 - **Notes:** Add a gentle vertical bob (`object.position.y += sin(2π u)*A`) for
@@ -235,9 +236,12 @@ desired = subject.position + offset
 camera.position.lerp(desired, 1 - exp(-k·dt))   // critically-ish damped follow
 target  = subject.position + lookAhead·subject.velocity
 ```
-- **Notes:** The module exposes `follow(camera, subject, { offset, stiffness })`
-  to call inside the render loop. `stiffness` low = loose telephoto lag, high =
-  locked.
+- **Notes:** `follow(subjectAt, { offset, lag, lookAhead })` returns a normal
+  `move(u)`, where `subjectAt(u)` is the subject's own path. The telephoto lag
+  comes from sampling the subject `lag` earlier rather than from damping
+  state: loose lag = large value, locked = 0. A damped follow that reads the
+  camera's previous position cannot be a shot — it depends on which frame was
+  rendered before it.
 
 ## 16. Dutch Angle / Roll
 A modifier that ramps `roll` (camera tilt about the view axis) for unease/style.

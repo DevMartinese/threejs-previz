@@ -114,7 +114,7 @@ component is separate.
 4. **Gate the render on the audit.** `lib/auditScenes.mjs` runs the collision,
    framing and floor audits headlessly — no browser, no GPU, because they are
    bounding boxes, BVH intersections and NDC projection. It exits non-zero on
-   failure, so `npm run audit && remotion render …` refuses to render a shot that
+   failure, so `pnpm audit:scenes && remotion render …` refuses to render a shot that
    cuts the hero off. Measured: about 100 ms for a scene that takes minutes to
    render.
 

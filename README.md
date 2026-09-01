@@ -8,19 +8,40 @@ The output is a **motion reference** for a generative video model (Higgsfield,
 Seedance, …): the model supplies texture and light; you keep control of staging,
 timing and framing — exactly the things a model cannot invent consistently.
 
-https://github.com/user-attachments — see `out/roundtable.mp4` after your first
-`npm run render`: six characters at a round table, a 30-second piece with an
-orbit whose gaze hands off face to face, three over-the-shoulder cuts, and real
-handheld — authored entirely in code, gated by audits, rendered end to end.
+## Blender, and the same thing in code
+
+The left column is a Blender blocking pass. The right is the same beats built
+with this tool — the cup split into three horizontal slices with the layer
+edges exposed, and the vertical cross-section that sweeps past camera — except
+that here every shot is checked before it renders, and the whole piece is a
+file you can diff.
+
+![Blender reference beside the same beats built with threejs-previz](media/tiramisu-blender-vs-previz.png)
+
+▶ [`media/tiramisu-blender-reference.mp4`](media/tiramisu-blender-reference.mp4) — the Blender pass
+▶ [`media/tiramisu.mp4`](media/tiramisu.mp4) — 13 cuts, 720 frames, 2520×1080, this tool
+
+## The pieces in `media/`
+
+Every one of these is a single scene file under `src/scenes/`, rendered end to
+end and gated by the audits. Click to play.
+
+| | what it is | what it exercises |
+|---|---|---|
+| ▶ [tiramisu](media/tiramisu.mp4) | a 9 cm kraft cup, 13 cuts, 30 s | two cutting systems on one prop — horizontal bands for the hook, a vertical halving for the close-up — plus the moka→cup→glass chain, measured by `attachments` |
+| ▶ [orbital](media/orbital.mp4) | three worlds, one camera, no cuts | a dome orbit that ends at ground level, dips through the floor, swaps the world under an opaque surface and rises into the next |
+| ▶ [floors](media/floors.mp4) | three takes, one rising move | a move identical to 0.0e+0 across takes, a hero derived from the integral of the speed profile, and floor slabs whose dark flash is geometry |
+| ▶ [canspot](media/canspot.mp4) | a soda can, 13 cuts | CSG slices, clone choreography emerging from inside the hero, object animation as a pure function of the frame |
+| ▶ [roundtable](media/roundtable.mp4) | six characters, four cuts | identity colour as a cast list — the gaze hands off face to face, three over-the-shoulder cuts, real handheld |
 
 ## Quick start
 
 ```bash
-npm install
-npm run audit     # the gate: eight checks per shot, headless, ~150 ms for 900 frames
-npm run render    # audit && render the 30 s roundtable scene to out/
-npm run studio    # scrub the timeline in Remotion Studio (the shot's view)
-npm run inspect   # the inspector: orbit the scene, see the camera's path
+pnpm install
+pnpm audit:scenes  # the gate: eight checks per shot, headless, ~150 ms for 900 frames
+pnpm render        # audit && render the 30 s roundtable scene to out/
+pnpm studio        # scrub the timeline in Remotion Studio (the shot's view)
+pnpm inspect       # the inspector: orbit the scene, see the camera's path
 ```
 
 `studio` shows you what the shot sees. `inspect` shows you the shot itself —
@@ -33,7 +54,7 @@ explains their findings. It reuses `def.make()`, `def.pose()` and
 `applyFrame` — the same pure functions Remotion renders, so there is no
 second implementation to drift.
 
-`npm run render` refuses to start if any audit fails. That is the point: a
+`pnpm render` refuses to start if any audit fails. That is the point: a
 failed shot costs milliseconds to find, not a render measured in minutes.
 
 ## Layout
@@ -58,7 +79,7 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │       ├── canspot.js       13-cut product piece: CSG slices, clone
 │       │                    choreography, object animation, 16 audited entries
 │       └── demo.js          the smallest complete scene (2 characters, 2 shots)
-├── inspector/               the Vite app behind `npm run inspect`
+├── inspector/               the Vite app behind `pnpm inspect`
 ├── docs/                    the method, written up
 └── skills/                  the same material packaged as Claude skills
 ```
@@ -152,8 +173,8 @@ export default defineScene({
 });
 ```
 
-Register it in `src/Root.jsx`, and it is auditable (`npm run audit`), scrubbable
-(`npm run studio`) and renderable (`remotion render myscene out/myscene.mp4`)
+Register it in `src/Root.jsx`, and it is auditable (`pnpm audit:scenes`), scrubbable
+(`pnpm studio`) and renderable (`remotion render myscene out/myscene.mp4`)
 with nothing restated anywhere.
 
 ## The roundtable scene as a worked case study
@@ -181,7 +202,7 @@ next was layered on. The git history *is* the case study:
 
 ## Output for a video model
 
-- **Frame-exactness beats bitrate** — `npm run frames` renders a PNG sequence.
+- **Frame-exactness beats bitrate** — `pnpm frames` renders a PNG sequence.
 - **Keep the aspect the model expects**; letterboxing teaches it the letterbox.
 - **Keep the flat identity colours.** They are the reference's semantics.
 - **Render at the target resolution** — bump `height` in the scene definition.
@@ -206,9 +227,9 @@ them:
   If you write a custom stage, mount the scene, never the groups.
 - `Config.setChromiumOpenGlRenderer('angle')` is set in `remotion.config.ts`;
   without it some machines render black.
-- Films are verified in **both modes**: `npm run render:film` (live — two
+- Films are verified in **both modes**: `pnpm render:film` (live — two
   `<ThreeCanvas>` scenes through a real TransitionSeries dissolve) and
-  `npm run render:film:stitch` (scenes pre-rendered to `public/`, stitched via
+  `pnpm render:film:stitch` (scenes pre-rendered to `public/`, stitched via
   `<OffthreadVideo>`); the two dissolve frames match pixel for pixel. The film
   definition lives in plain-JS `film.js` so the gate audits the real file, and
   `filmComposition` throws if transitions are declared without injecting
