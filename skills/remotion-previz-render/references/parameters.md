@@ -127,7 +127,7 @@ What the writeback will NOT do:
 
 It *will* save values that fail the gate — the file is your working state, and
 a panel that refuses to save is a panel that fights you — but the report comes
-back red and `pnpm render` stays shut until you fix it.
+back red and every render script stays shut until you fix it.
 
 ---
 

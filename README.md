@@ -42,11 +42,19 @@ end and gated by the audits. Click to play.
 
 ```bash
 pnpm install
-pnpm audit:scenes  # the gate: eight checks per shot, headless, ~150 ms for 900 frames
-pnpm render        # audit && render the 30 s roundtable scene to out/
-pnpm studio        # scrub the timeline in Remotion Studio (the shot's view)
-pnpm inspect       # the inspector: orbit the scene, see the camera's path
+pnpm audit:scenes             # the gate: eight checks per shot, headless
+                              # (~150 ms for canspot's 900 frames; 1.6 s for all eight definitions)
+pnpm render:scene tiramisu    # audit && render any scene to out/<id>.mp4
+pnpm studio                   # scrub the timeline in Remotion Studio (the shot's view)
+pnpm inspect                  # the inspector: orbit the scene, tune it, see the camera's path
 ```
+
+`render:scene` takes any composition id and forwards the rest to Remotion, so
+every piece above is one command — `pnpm render:scene orbital`,
+`pnpm render:scene floors`, and a PNG sequence with
+`pnpm render:scene tiramisu out/frames --sequence`. The files in `media/` are
+those renders downscaled to 1260x540 to keep the repo small; the
+command gives you the full-resolution original.
 
 `studio` shows you what the shot sees. `inspect` shows you the shot itself —
 free orbit, the camera's whole trajectory drawn as a line coloured per shot
@@ -87,15 +95,21 @@ Tuning is held **per scene across the dropdown**, so you can settle three
 scenes and take the whole edit out in one command; the panel lists every film
 the current scene belongs to. See [docs/parameters.md](docs/parameters.md).
 
-`pnpm render` refuses to start if any audit fails. That is the point: a
-failed shot costs milliseconds to find, not a render measured in minutes.
+Every render script runs the gate first and refuses to start if any audit
+fails. That is the point: a failed shot costs milliseconds to find, not a
+render measured in minutes.
+
+`public/*.mp4` is gitignored, so on a fresh clone the `feature-stitch`
+composition has no files to play until you run `pnpm render:film:stitch` —
+which renders its two scenes into `public/` and then stitches them. The `live`
+film (`pnpm render:film`) needs nothing on disk.
 
 ## Layout
 
 ```
 ├── lib/                     the runtime — one copy of each module
 │   ├── cameraMoves.js       the PATH:     move(u) -> {position,target,fov,roll}
-│   ├── blocking.js          the SCENE:    identity, groups, CSG, the 3 audits
+│   ├── blocking.js          the SCENE:    identity, groups, CSG, anchors, the audits
 │   ├── geometry.js          the SHAPES:   every shape, no exceptions
 │   ├── shots.js             the TIMELINE: frame -> shot -> u -> camera
 │   ├── scene.js             the DEFINITION: defineScene — plain JS, Node loads it
@@ -108,20 +122,68 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 ├── src/
 │   ├── index.jsx            registerRoot
 │   ├── Root.jsx             one <Composition> per scene, all metadata derived
+│   ├── film.js              the EDIT itself: feature (live) + feature-stitch
 │   └── scenes/
-│       ├── roundtable.js    6 characters, 4 cuts, target handoffs, handheld
+│       ├── tiramisu.js      9 cm cup, 13 entries, 720 frames, 2520x1080
+│       ├── orbital.js       three co-located worlds, 6 entries, one unbroken orbit
+│       ├── floors.js        three takes of one rising move, 9 entries
 │       ├── canspot.js       13-cut product piece: CSG slices, clone
-│       │                    choreography, object animation, 16 audited entries
+│       │                    choreography, object animation, 15 audited entries
+│       ├── roundtable.js    6 characters, 4 cuts (6 entries), handoffs, handheld
+│       ├── opening.js       3 s overhead establisher, reusing roundtable's build
 │       └── demo.js          the smallest complete scene (2 characters, 2 shots)
 ├── inspector/               the Vite app behind `pnpm inspect`
+│   ├── main.jsx             scene picker, playhead, layer toggles
+│   ├── params.jsx           the knob panel and the commands it emits
 │   └── writeback.js         save knob values into the scene file, then audit
 ├── docs/                    the method, written up
 └── skills/                  the same material packaged as Claude skills
+    ├── threejs-blocking-scenes/
+    ├── threejs-camera-moves/
+    └── remotion-previz-render/
 ```
 
 A scene file imports from `scene.js` and **never** from `remotion.jsx` — that
 keeps it loadable by plain Node, which is what lets the audit gate check the
 real scene rather than a stub.
+
+## Docs
+
+| | |
+|---|---|
+| [`blocking-scenes.md`](docs/blocking-scenes.md) | the method: identity colour, naming, stages, CSG rules, every audit and what it catches, determinism |
+| [`camera-moves.md`](docs/camera-moves.md) | the move catalog — each path's `f(u)`, easing, duration, and the Cinema Studio genre mapping |
+| [`lens-and-framing.md`](docs/lens-and-framing.md) | focal length, film gauge, lens shift, near/far, and matching a DCC camera exactly |
+| [`geometry-vocabulary.md`](docs/geometry-vocabulary.md) | choosing a construction, with a shape → helper table |
+| [`remotion-pipeline.md`](docs/remotion-pipeline.md) | project layout, render-time determinism, the gate, films, render commands, failure modes |
+| [`parameters.md`](docs/parameters.md) | the knobs a scene declares, the round trip through the inspector, films, and which numbers should never become a slider |
+
+## Using it with Claude
+
+`skills/` holds the same material as three Claude skills — the blocking method
+and geometry vocabulary, the camera-move catalog, and the Remotion/render
+pipeline. Each directory is self-contained (a `SKILL.md` plus its
+`references/`), so make them available by copying them where Claude Code looks
+for skills:
+
+```bash
+cp -r skills/* ~/.claude/skills/          # available everywhere
+cp -r skills/* /path/to/project/.claude/skills/   # this project only
+```
+
+The directory name is the skill name, so keep them as they are. They are
+written to be read *before* writing code — the camera maths (Dolly Zoom
+especially) and the half-open shot ranges are both easy to get subtly wrong
+from memory.
+
+This matters for how the repo is meant to be worked on. You ask for a scene;
+it gets built, audited and rendered. Something is off, so you open
+`pnpm inspect`, turn the knob and **save** — which writes the value into the
+scene file and audits it. Then you say *"carry on from what I changed"*, and
+what changed is in the repo, in a diff, not in a browser tab. If what you
+dislike is structural — a cut, a duration, the geometry — that is an edit to
+the scene file itself, by hand or by asking; the shot list is the edit, and
+there is deliberately no slider for it.
 
 ## The rules that carry the pipeline
 
@@ -175,7 +237,7 @@ real scene rather than a stub.
   film, or a Remotion worker can build many scenes in one process.
 - **Build once per worker, move only the camera — and the poses.** `def.make()`
   runs in a `useMemo`; CSG and BVH are build-time work. Objects that move do it
-  through `defineScene({ animate })` — a pure function `({ ctx, frame }) => …`
+  through `defineScene({ animate })` — a pure function `({ ctx, frame, p }) => …`
   that poses everything from scratch each frame. `def.pose(ctx, frame)` is the
   single resolver the gate, the renderer and the inspector all share, so the
   three cannot drift apart.
@@ -218,7 +280,7 @@ export default defineScene({
 
 Register it in `src/Root.jsx`, and it is auditable (`pnpm audit:scenes`), scrubbable
 (`pnpm studio`), tunable (`pnpm inspect`) and renderable
-(`remotion render myscene out/myscene.mp4`) with nothing restated anywhere.
+(`pnpm render:scene myscene`) with nothing restated anywhere.
 `params` is optional — a scene with no knobs keeps `build: ({ ctx, geo })` and
 a plain `shots` array, exactly as before.
 
@@ -247,7 +309,8 @@ next was layered on. The git history *is* the case study:
 
 ## Output for a video model
 
-- **Frame-exactness beats bitrate** — `pnpm frames` renders a PNG sequence.
+- **Frame-exactness beats bitrate** — `pnpm render:scene <id> out/frames --sequence`
+  renders a PNG sequence and removes the compression question entirely.
 - **Keep the aspect the model expects**; letterboxing teaches it the letterbox.
 - **Keep the flat identity colours.** They are the reference's semantics.
 - **Render at the target resolution** — bump `height` in the scene definition.
@@ -255,10 +318,10 @@ next was layered on. The git history *is* the case study:
 ## Verified
 
 Rendered end to end on `remotion@4.x` + `@remotion/three` + `@react-three/fiber@8`
-+ `three@0.185`: the 30 s / 720-frame roundtable scene to mp4 (24 fps, 21:9),
-stills, and the audit gate loading the real scene files in Node (~30 ms for
-900 frames across two scenes). Notes from first contact, so you don't rediscover
-them:
++ `three@0.185`: every scene in `src/scenes/` to mp4, stills, PNG sequences, and
+both film modes. The gate loads the real scene files in Node — 1.6 s for all
+eight definitions, 4032 frames, no GPU. Notes from first contact, so you don't
+rediscover them:
 
 - Remotion requires a `tsconfig.json` even in an all-JS project.
 - The audits call `updateWorldMatrix(true, false)` — ancestors included —
@@ -285,3 +348,15 @@ them:
   definition lives in plain-JS `film.js` so the gate audits the real file, and
   `filmComposition` throws if transitions are declared without injecting
   `TransitionSeries`/`linearTiming`. Composition ids allow no underscores.
+- A **stitched** film cannot take parameters: it plays the files in `public/`,
+  so a `--props` handed to it could not reach the geometry that made those
+  frames. It throws and names the fix rather than rendering the defaults while
+  the command claims otherwise. The inspector's stitch command therefore
+  renders each tuned scene into `public/` first, then stitches — verified end
+  to end (44 s), as was the live path (16 s).
+- The inspector's writeback edits source, so it is deliberately narrow: dev
+  server only, `src/scenes/*.js` only, the `params:` block only, and it refuses
+  any block that changes a *declaration* rather than a value. That last guard
+  caught a real bug — the first generator dropped `label`, which would have
+  silently deleted every custom label in the file. All seven scenes now
+  round-trip through it to an identical schema.

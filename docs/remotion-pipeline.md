@@ -215,12 +215,17 @@ The render order for `stitch` is scenes first, film last:
 
 ```json
 "scripts": {
-  "audit:scenes": "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
-  "render:scenes": "remotion render intro public/intro.mp4 && remotion render roundtable public/roundtable.mp4",
-  "render:film":   "remotion render feature out/feature.mp4",
-  "render":        "pnpm audit:scenes && pnpm render:scenes && pnpm render:film"
+  "audit:scenes":       "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
+  "render:scene":       "pnpm audit:scenes && remotion render",
+  "render:film":        "pnpm audit:scenes && remotion render feature out/feature.mp4",
+  "render:film:stitch": "pnpm audit:scenes && remotion render opening public/opening.mp4 && remotion render roundtable public/roundtable.mp4 && remotion render feature-stitch out/feature-stitch.mp4"
 }
 ```
+
+`render:scene` takes the composition id as an argument and forwards the rest to
+Remotion — `pnpm render:scene tiramisu`, or
+`pnpm render:scene tiramisu out/frames --sequence`. With no output path Remotion
+writes `out/<id>.mp4`.
 
 Scene renders go to `public/` because `staticFile()` reads from there.
 
@@ -305,11 +310,15 @@ assume.
 ## 8. Rendering
 
 ```bash
-npx remotion studio                                   # scrub, check the cuts
-npx remotion render roundtable out/roundtable.mp4     # the video
-npx remotion still roundtable out/f120.png --frame=120
-npx remotion render roundtable out/frames --sequence  # PNG sequence
+pnpm studio                                            # scrub, check the cuts
+pnpm inspect                                           # orbit it, tune the knobs
+pnpm render:scene roundtable                           # -> out/roundtable.mp4
+pnpm still:scene roundtable out/f120.png --frame=120
+pnpm render:scene roundtable out/frames --sequence     # PNG sequence
 ```
+
+Parameters ride on both the gate and the render, and the inspector writes the
+command for you — see `parameters.md`.
 
 `remotion studio` is the equivalent of scrubbing the timeline: it is where you
 judge whether the cuts land, which is a question no audit can answer.

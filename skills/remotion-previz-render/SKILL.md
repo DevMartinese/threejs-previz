@@ -140,14 +140,15 @@ component is separate.
    than one scene. It derives the duration, including the transition subtraction,
    and checks the things that fail silently between scenes.
 
-4. **Gate the render on the audit.** `lib/auditScenes.mjs` runs the collision,
-   framing and floor audits headlessly — no browser, no GPU, because they are
-   bounding boxes, BVH intersections and NDC projection. It exits non-zero on
-   failure, so `pnpm audit:scenes && remotion render …` refuses to render a shot that
-   cuts the hero off. Measured: about 100 ms for a scene that takes minutes to
-   render.
+4. **Gate the render on the audit.** `lib/auditScenes.mjs` runs every audit
+   headlessly — no browser, no GPU, because they are bounding boxes, BVH
+   intersections and NDC projection. It exits non-zero on failure, so
+   `pnpm audit:scenes && remotion render …` refuses to render a shot that cuts
+   the hero off. Measured on this repo: 146 ms for a 900-frame scene, 1.6 s for
+   eight definitions and 4032 frames.
 
-5. **Render.** `npx remotion render <id> out/<id>.mp4`, or a PNG sequence when the
+5. **Render.** `pnpm render:scene <id>` (audits first, writes `out/<id>.mp4`),
+   or `pnpm render:scene <id> out/frames --sequence` for a PNG sequence when the
    output is a motion reference and you want frame-exact control.
 
 ## Scenes and films

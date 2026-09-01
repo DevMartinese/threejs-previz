@@ -60,17 +60,17 @@ Three orthogonal pieces combine to produce a shot:
 
 This is also exactly how Higgsfield's Cinema Studio splits things: the **preset**
 is the path, the **speedramp** is the easing, the **genre** biases feel
-(FOV, shake, cut rhythm). See `skills/camera-moves/references/camera-moves.md` for the full mapping.
+(FOV, shake, cut rhythm). See `references/camera-moves.md` for the full mapping.
 
 ## How to use this skill
 
-1. **Identify the move(s)** the user wants from `skills/camera-moves/references/camera-moves.md`.
+1. **Identify the move(s)** the user wants from `references/camera-moves.md`.
    That file is the catalog: for each named move it gives the parametric
    `f(u)`, a recommended easing, a typical duration, and gotchas. Read it before
    writing code — do not improvise the camera math from memory, the framing math
    (especially Dolly Zoom) is easy to get subtly wrong.
 
-2. **Drop in the module.** `${CLAUDE_PLUGIN_ROOT}/lib/cameraMoves.js` is a zero-dependency module
+2. **Drop in the module.** `lib/cameraMoves.js` (from the threejs-previz repo) is a zero-dependency module
    that already implements every move in the catalog plus a player and adapters.
    Copy it into the project (or adapt it) rather than rewriting from scratch.
 
@@ -91,7 +91,7 @@ is the path, the **speedramp** is the easing, the **genre** biases feel
 
 5. **Set the lens, not just the FOV.** If the shot is specified in millimetres, or
    has to match a camera exported from Blender / Maya / a real plate, see
-   `skills/camera-moves/references/lens-and-framing.md`: `filmGauge` + `setFocalLength()` let you
+   `references/lens-and-framing.md`: `filmGauge` + `setFocalLength()` let you
    author in mm, `filmOffset` shifts the frame without rotating the camera, and
    the near plane needs attention in product-scale scenes. That file also has the
    recipe for measuring whether a subject stays in frame across a move instead of
@@ -145,10 +145,10 @@ rather than in the bridge.
 
 ## Files
 
-- `skills/camera-moves/references/camera-moves.md` — the catalog. Every move with its `f(u)`,
+- `references/camera-moves.md` — the catalog. Every move with its `f(u)`,
   easing, duration, and notes, plus the Cinema Studio genre/speedramp mapping.
   Has a table of contents at the top.
-- `skills/camera-moves/references/lens-and-framing.md` — physical camera parameters in Three.js:
+- `references/lens-and-framing.md` — physical camera parameters in Three.js:
   focal length / film gauge / FOV maths, matching a Blender or DCC camera exactly,
   lens choice per focal length, lens shift (`filmOffset`), near/far and depth
   precision, depth of field, and a framing-audit snippet. Has a table of contents.

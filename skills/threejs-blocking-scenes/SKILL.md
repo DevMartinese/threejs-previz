@@ -149,12 +149,12 @@ Spatial relationships and timing, yes — block those. Surface and turbulence, n
 
 ## Files
 
-- `skills/blocking-scenes/references/geometry-vocabulary.md` — how to choose a construction, with a
+- `references/geometry-vocabulary.md` — how to choose a construction, with a
   shape → helper table up front, then curves and sweeps, extrusion, shells,
   deformers, layout, instancing, assemblies and utilities. Includes the measured
   gotchas: lathe arc orientation, the tessellation requirement, and why full
   circles don't duplicate their endpoint. Has a table of contents.
-- `skills/blocking-scenes/references/blocking-scenes.md` — the method. Identity colour, naming, stages,
+- `references/blocking-scenes.md` — the method. Identity colour, naming, stages,
   primitive vocabulary, CSG rules, the audits and what each one catches, anchors and
   attachments, the determinism contract, and a worked example with two real bugs the audits find.
   Has a table of contents.

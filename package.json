@@ -3,17 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cinematic previz in code: Three.js blocking scenes, a camera-move catalog, measured audits, and deterministic Remotion renders \u2014 motion references for generative video models.",
+  "description": "Cinematic previz in code: Three.js blocking scenes, a camera-move catalog, measured audits, and deterministic Remotion renders — motion references for generative video models.",
   "scripts": {
     "studio": "remotion studio",
-    "render": "pnpm audit:scenes && remotion render roundtable out/roundtable.mp4",
-    "render:demo": "pnpm audit:scenes && remotion render demo out/demo.mp4",
+    "inspect": "vite --config inspector/vite.config.js",
+    "audit:scenes": "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
+    "render:scene": "pnpm audit:scenes && remotion render",
     "render:film": "pnpm audit:scenes && remotion render feature out/feature.mp4",
     "render:film:stitch": "pnpm audit:scenes && remotion render opening public/opening.mp4 && remotion render roundtable public/roundtable.mp4 && remotion render feature-stitch out/feature-stitch.mp4",
-    "still": "remotion still roundtable out/still.png --frame=180",
-    "frames": "pnpm audit:scenes && remotion render roundtable out/frames --sequence",
-    "inspect": "vite --config inspector/vite.config.js",
-    "audit:scenes": "node lib/auditScenes.mjs src/scenes/*.js src/film.js"
+    "still:scene": "remotion still"
   },
   "dependencies": {
     "@react-three/fiber": "^8.17.10",
