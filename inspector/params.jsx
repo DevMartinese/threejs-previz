@@ -129,11 +129,29 @@ async function save(file, block, set) {
   }
 }
 
-export function ParamPanel({ def, file, values, onChange, onReset, error, films = [] }) {
+/**
+ * The whole panel, in one lil-gui: what you are looking at, what is drawn over
+ * it, the scene's own knobs, and the ways out. There is deliberately no second
+ * set of controls anywhere — a viewer with a toolbar AND a panel makes you
+ * learn where each thing lives.
+ *
+ * It is built in two layers, because they have different lifetimes:
+ *
+ *   the SHELL   scene, camera and layers. Built once and never torn down, so
+ *               the selector you just used does not get destroyed underneath
+ *               your cursor when it changes the scene.
+ *   the SCENE   params, output and films. Rebuilt when the scene changes, and
+ *               always appended after the shell so the order never shuffles.
+ */
+export function ParamPanel({
+  def, file, values, onChange, onReset, error, films = [], view,
+}) {
   const host = useRef(null);
   const guiRef = useRef(null);
-  const targetRef = useRef({});
+  const shell = useRef({});          // the shell's target object + controllers
+  const targetRef = useRef({});      // the knobs' target object
   const filmCtrls = useRef([]);
+  const folders = useRef({});
   const [note, setNote] = useState('');
   const [saveState, setSaveState] = useState(null);
 
@@ -144,25 +162,50 @@ export function ParamPanel({ def, file, values, onChange, onReset, error, films 
   // so the panel is built once per scene rather than rebuilt on every render —
   // a GUI that is torn down mid-drag loses the drag.
   const live = useRef({});
-  live.current = { def, file, values, onChange, onReset, films, setSaveState, setNote };
+  live.current = { def, file, values, onChange, onReset, films, view, setSaveState, setNote };
 
+  // ---- the shell: built once ------------------------------------------------
   useEffect(() => {
     if (!host.current) return undefined;
     const l = () => live.current;
-    const gui = new GUI({ container: host.current, title: def.id, width: 280 });
+    const gui = new GUI({ container: host.current, title: 'previz', width: 280 });
     guiRef.current = gui;
 
+    // `tuned` needs a starting value: lil-gui refuses to add a property that
+    // is undefined, and the controller it hands back is then undefined too.
+    const t = { scene: l().view.sceneId, camera: l().view.mode, tuned: 'none',
+                ...l().view.show };
+    shell.current = { target: t, layers: {} };
+
+    shell.current.scene = gui.add(t, 'scene', l().view.sceneIds)
+      .onChange((v) => l().view.onScene(v));
+    shell.current.camera = gui.add(t, 'camera', { 'free orbit': 'free', 'shot camera': 'shot' })
+      .onChange((v) => l().view.onMode(v));
+
+    const layers = gui.addFolder('layers').close();
+    for (const k of Object.keys(l().view.show)) {
+      shell.current.layers[k] = layers.add(t, k).onChange((v) => l().view.onShow(k, v));
+    }
+    return () => { gui.destroy(); guiRef.current = null; };
+  }, []); // eslint-disable-line
+
+  // ---- per scene: the knobs, the ways out, the films ------------------------
+  useEffect(() => {
+    const gui = guiRef.current;
+    if (!gui) return undefined;
+    const l = () => live.current;
+
+    const pf = gui.addFolder('params');   // the title and the selector already name the scene
+    folders.current.params = pf;
     const target = { ...l().values };
     targetRef.current = target;
 
-    if (!knobs.length) {
-      gui.add({ note: 'this scene declares no params' }, 'note').disable();
-    }
+    if (!knobs.length) pf.add({ note: 'no params declared' }, 'note').disable();
 
     for (const d of knobs) {
-      const c = d.kind === 'number' ? gui.add(target, d.key, d.min, d.max, d.step)
-        : d.kind === 'enum' ? gui.add(target, d.key, d.options)
-        : gui.add(target, d.key);
+      const c = d.kind === 'number' ? pf.add(target, d.key, d.min, d.max, d.step)
+        : d.kind === 'enum' ? pf.add(target, d.key, d.options)
+        : pf.add(target, d.key);
       c.name(d.unit && d.kind === 'number' ? `${d.label} (${d.unit})` : d.label);
       // The declaration's `note` is the hard-won bit — why this number is what
       // it is. lil-gui has nowhere to print it, so it becomes the tooltip.
@@ -171,20 +214,21 @@ export function ParamPanel({ def, file, values, onChange, onReset, error, films 
     }
 
     const out = gui.addFolder('output');
+    folders.current.output = out;
     out.add({ f: () => save(l().file, paramSource(l().def.params, l().values), l().setSaveState) }, 'f')
       .name('save to scene file');
     out.add({ f: () => copy(renderCommand(l().def, l().file, l().values), l().setNote) }, 'f')
       .name('copy render command');
     out.add({ f: () => copy(paramSource(l().def.params, l().values), l().setNote) }, 'f')
       .name('copy params block');
-    out.add({ f: () => l().onReset() }, 'f').name('reset to defaults');
+    out.add({ f: () => l().onReset() }, 'f').name('reset this scene');
+    shell.current.tuned = out.add(shell.current.target, 'tuned').disable();
+    out.add({ f: () => l().view.onClearAll() }, 'f').name('clear all tuning');
 
-    // The films this scene belongs to. Which films those are depends only on
-    // the scene, so the buttons are stable; only their labels move, and those
-    // are refreshed below.
     filmCtrls.current = [];
     if (l().films.length) {
       const ff = gui.addFolder('films');
+      folders.current.films = ff;
       l().films.forEach((entry, i) => {
         filmCtrls.current.push(ff.add({ f: () => {
           const now = l().films[i];
@@ -193,22 +237,44 @@ export function ParamPanel({ def, file, values, onChange, onReset, error, films 
       });
     }
 
-    return () => { gui.destroy(); guiRef.current = null; filmCtrls.current = []; };
+    return () => {
+      for (const k of ['params', 'output', 'films']) {
+        folders.current[k]?.destroy();
+        folders.current[k] = null;
+      }
+      filmCtrls.current = [];
+    };
   }, [def]); // eslint-disable-line
 
+  // ---- keep the widgets honest about the state they are showing -------------
+
   // Values changed from outside the GUI — a reset, a reload, a scene switch.
-  // Refill the target and pull the widgets back in line, and mark the ones
-  // that no longer sit at their declared default.
   useEffect(() => {
     const gui = guiRef.current;
     if (!gui) return;
     Object.assign(targetRef.current, values);
     for (const c of gui.controllersRecursive()) {
-      if (!(c.property in values)) continue;
+      if (c.object !== targetRef.current || !(c.property in values)) continue;
       c.updateDisplay();
       c.domElement.classList.toggle('dirty', c.property in diff);
     }
   }, [values, diff]);
+
+  // The shell reflects app state it does not own: the scene, the camera mode,
+  // the layer toggles and which scenes are currently off their defaults.
+  useEffect(() => {
+    const sh = shell.current;
+    if (!sh.target) return;
+    const list = view.tunedScenes;
+    Object.assign(sh.target, { scene: view.sceneId, camera: view.mode, ...view.show },
+      { tuned: list.length ? list.join(', ') : 'none' });
+    sh.scene?.updateDisplay();
+    sh.camera?.updateDisplay();
+    for (const c of Object.values(sh.layers ?? {})) c.updateDisplay();
+    sh.tuned?.updateDisplay();
+    sh.tuned?.domElement.classList.toggle('dirty', list.length > 0);
+    guiRef.current?.title(view.sceneId);
+  }, [view]);
 
   // Film labels carry how much of the edit is currently tuned, which changes
   // as you move through the scenes.
@@ -224,13 +290,6 @@ export function ParamPanel({ def, file, values, onChange, onReset, error, films 
   return (
     <aside id="params">
       <div ref={host} className="gui-host" />
-      {films.length > 0 && (
-        <p className="dim note">
-          A film command renders the edit with every scene at the values held
-          here. A stitched film renders its scenes into <code>public/</code>{' '}
-          first — parameters cannot reach frames that already exist.
-        </p>
-      )}
       {note && <p className="dim note">{note}</p>}
       {error && <pre className="error">{error}</pre>}
       {saveState && <pre className={saveState.bad ? 'error' : 'report'}>{saveState.text}</pre>}

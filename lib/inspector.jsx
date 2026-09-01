@@ -36,6 +36,9 @@ import { nearFor } from './blocking.js';
 const SHOT_HUES = [0.02, 0.13, 0.28, 0.42, 0.52, 0.62, 0.72, 0.82, 0.9, 0.07,
                    0.18, 0.34, 0.47, 0.57, 0.67, 0.77];
 
+/** The shot camera's frustum. Flat, so it reads as structure, not as a subject. */
+const HELPER_COLOUR = new Color(0x000000);
+
 /**
  * The camera path as a coloured polyline plus a marker at every cut.
  * Sampled with the scene's own `applyFrame` on a throwaway camera, so the
@@ -85,7 +88,12 @@ function Overlay({ def, ctx, list, shotCam, frame, show }) {
       made.push(['cuts', m]);
     }
 
+    // Three's CameraHelper is orange/red/white/blue out of the box, which
+    // washes out against a Blender-grey floor — the frustum is exactly what
+    // you are trying to read, so it is drawn in flat black instead.
     const helper = new CameraHelper(shotCam);
+    helper.setColors(HELPER_COLOUR, HELPER_COLOUR, HELPER_COLOUR,
+                     HELPER_COLOUR, HELPER_COLOUR);
     helper.name = 'INS_frustum';
     made.push(['frustum', helper]);
 

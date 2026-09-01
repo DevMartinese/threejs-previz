@@ -8,14 +8,12 @@
       * { box-sizing: border-box; }
       body { margin: 0; background: #17181a; color: #d8d8d8;
              font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-      #app { display: grid; grid-template-rows: auto 1fr auto; grid-template-columns: 1fr;
-             grid-template-areas: "head" "stage" "foot"; height: 100vh; }
-      #app.with-panel { grid-template-columns: 1fr 280px;
-                        grid-template-areas: "head head" "stage params" "foot foot"; }
-      header { grid-area: head; border-bottom: 1px solid #2e3033; }
-      footer { grid-area: foot; border-top: 1px solid #2e3033; }
-      header, footer { padding: 8px 12px; background: #202225; border-color: #2e3033;
-                       display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+      /* Two columns and a transport strip; every control lives in the panel. */
+      #app { display: grid; grid-template-rows: 1fr auto; grid-template-columns: 1fr 280px;
+             grid-template-areas: "stage params" "foot foot"; height: 100vh; }
+      footer { grid-area: foot; border-top: 1px solid #2e3033;
+               padding: 8px 12px; background: #202225;
+               display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 
       #params { grid-area: params; background: #202225; border-left: 1px solid #2e3033;
                 padding: 0 0 16px; overflow-y: auto; display: flex;
@@ -40,6 +38,9 @@
       .stage-error { max-width: 460px; padding: 18px 20px; border-radius: 6px;
                      background: #23252a; border: 1px solid #3a3d42; line-height: 1.5; }
       .stage-error p { margin: 8px 0 0; }
+      .params-error { grid-area: params; background: #23252a; padding: 14px;
+                      border-left: 1px solid #3a3d42; line-height: 1.5; overflow: auto; }
+      .params-error p { margin: 8px 0 0; }
       .report, .error { margin: 0; padding: 6px 8px; border-radius: 4px; font-size: 11px;
                         white-space: pre-wrap; max-height: 220px; overflow: auto;
                         font-family: inherit; }

@@ -63,8 +63,10 @@ wants a different length is a different scene.
 pnpm inspect
 ```
 
-The panel on the right is **lil-gui**, generated entirely from the declaration
-— there is no list of controls anywhere in the inspector. A scene that declares
+The panel on the right is a single **lil-gui**, holding the scene selector, the
+camera mode, the overlay toggles, the knobs and the ways out — there is no
+second set of controls to learn. The knob section is generated entirely from
+the declaration; there is no list of controls anywhere in the inspector. A scene that declares
 a knob gets a control (a slider for a number, a checkbox for a boolean, a select
 for an enum), its `unit` goes in the label, its `note` becomes the tooltip, and
 a value that has left its declared default is highlighted. A scene that declares

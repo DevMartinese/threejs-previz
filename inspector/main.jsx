@@ -82,27 +82,23 @@ function saveTuning(tuning, scenes) {
 }
 
 /**
- * A WebGL failure inside `<Canvas>` throws during render, and an unhandled
- * throw unmounts the WHOLE React tree — the header, the playhead and the knob
- * panel with it. The symptom is a blank page with nothing to read, which is
- * the least useful thing a viewer can do when the machine it is running on
- * cannot give it a context. Contained here, the stage reports itself and
- * everything else keeps working.
+ * An unhandled throw during render unmounts the WHOLE React tree, so one
+ * broken part takes the viewer down to a blank page with nothing to read.
+ * Both halves are wrapped: WebGL fails on machines that cannot give a context
+ * (headless, remote, hardware acceleration off) and the panel is imperative
+ * code driving a third-party GUI. Whichever one goes, the other keeps working
+ * — and the audits never needed a GPU or a panel in the first place.
  */
-class StageBoundary extends React.Component {
+class Boundary extends React.Component {
   constructor(props) { super(props); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
   render() {
     if (!this.state.err) return this.props.children;
     return (
-      <div className="stage-error">
-        <b>the 3D view could not start</b>
+      <div className={this.props.className ?? 'stage-error'}>
+        <b>{this.props.what}</b>
         <p>{String(this.state.err.message ?? this.state.err)}</p>
-        <p className="dim">
-          Usually WebGL: a headless or remote session, a browser with hardware
-          acceleration off, or a driver that refuses a context. The panel and
-          the shot list still work, and the audits never needed a GPU.
-        </p>
+        {this.props.hint && <p className="dim">{this.props.hint}</p>}
       </div>
     );
   }
@@ -124,7 +120,6 @@ function App() {
   const [frame, setFrame] = useState(0);
   const [mode, setMode] = useState('free');
   const [playing, setPlaying] = useState(false);
-  const [panel, setPanel] = useState(true);
   const [show, setShow] = useState({ path: true, cuts: true, frustum: true, grid: true, heroes: true });
   const [tuning, setTuning] = useState(() => loadTuning(SCENES));  // kept across switches AND reloads
   const [def, file] = SCENES[id];
@@ -171,7 +166,6 @@ function App() {
   useEffect(() => { saveTuning(tuning, SCENES); }, [tuning]);
 
   const info = useMemo(() => shotAt(def, Math.min(frame, last), list), [def, list, frame, last]);
-  const toggle = (k) => setShow((s) => ({ ...s, [k]: !s[k] }));
   const setParam = (k, v) =>
     setTuning((s) => ({ ...s, [id]: { ...(s[id] ?? def.defaults), [k]: v } }));
 
@@ -191,36 +185,25 @@ function App() {
   const tunedScenes = Object.keys(tuning)
     .filter((k) => Object.keys(paramDiff(SCENES[k][0].params ?? {}, tuning[k])).length);
 
+  // Everything the old header used to hold. It lives in the same lil-gui as
+  // the knobs now — one panel, one place to look.
+  const view = useMemo(() => ({
+    sceneIds: Object.keys(SCENES), sceneId: id, onScene: setId,
+    mode, onMode: setMode,
+    show, onShow: (k, v) => setShow((s) => ({ ...s, [k]: v })),
+    tunedScenes, onClearAll: () => setTuning({}),
+  }), [id, mode, show, tunedScenes.join(), def]); // eslint-disable-line
+
   return (
-    <div id="app" className={panel ? 'with-panel' : ''}>
-      <header>
-        <select value={id} onChange={(e) => setId(e.target.value)}>
-          {Object.keys(SCENES).map((k) => (
-            <option key={k} value={k}>{tunedScenes.includes(k) ? `${k} •` : k}</option>
-          ))}
-        </select>
-        <button className={mode === 'free' ? 'on' : ''} onClick={() => setMode('free')}>free orbit</button>
-        <button className={mode === 'shot' ? 'on' : ''} onClick={() => setMode('shot')}>shot camera</button>
-        <span className="dim">|</span>
-        {['path', 'cuts', 'frustum', 'heroes', 'grid'].map((k) => (
-          <label key={k}>
-            <input type="checkbox" checked={show[k]} onChange={() => toggle(k)} />{k}
-          </label>
-        ))}
-        <button className={panel ? 'on' : ''} onClick={() => setPanel((p) => !p)}>
-          params{Object.keys(def.params ?? {}).length ? ` (${Object.keys(def.params).length})` : ''}
-        </button>
-        {tunedScenes.length > 0 && (
-          <>
-            <span className="tag hot">{tunedScenes.join(', ')} tuned</span>
-            <button onClick={() => setTuning({})}>clear all</button>
-          </>
-        )}
-        <span className="dim">{def.width}×{def.height} · {def.fps}fps · {list.duration}f</span>
-      </header>
+    <div id="app">
 
       <div id="stage">
-        <StageBoundary>
+        <Boundary
+          what="the 3D view could not start"
+          hint="Usually WebGL: a headless or remote session, a browser with hardware
+                acceleration off, or a driver that refuses a context. The panel and the
+                shot list still work, and the audits never needed a GPU."
+        >
         <Canvas
           style={{ width: '100%', height: '100%' }}
           camera={{ position: [def.subjectSize * 6, def.subjectSize * 4, def.subjectSize * 6], fov: 45,
@@ -232,16 +215,17 @@ function App() {
                             show={show} params={built.params} />
           )}
         </Canvas>
-        </StageBoundary>
+        </Boundary>
       </div>
 
-      {panel && (
+      <Boundary what="the panel could not start" className="params-error">
         <ParamPanel def={def} file={file} values={values} error={error} films={films}
-                    onChange={setParam}
+                    view={view} onChange={setParam}
                     onReset={() => setTuning((s) => ({ ...s, [id]: def.defaults }))} />
-      )}
+      </Boundary>
 
       <footer>
+        <span className="dim">{def.width}×{def.height} · {def.fps}fps · {list.duration}f</span>
         <button onClick={() => setPlaying((p) => !p)}>{playing ? '❚❚ pause' : '▶ play'}</button>
         <input type="range" min={0} max={last} value={Math.min(frame, last)}
                onChange={(e) => { setPlaying(false); setFrame(+e.target.value); }} />

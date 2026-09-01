@@ -58,14 +58,17 @@ command gives you the full-resolution original.
 
 `studio` shows you what the shot sees. `inspect` shows you the shot itself —
 free orbit, the camera's whole trajectory drawn as a line coloured per shot
-with a marker at every cut, the shot camera as a moving frustum, and green
-boxes on whatever the current shot declared as its `hero`. Toggle to
-"shot camera" to see the exact render, back to "free orbit" to understand
-it. It reuses `def.make()`, `def.pose()` and `applyFrame` — the same pure
-functions Remotion renders, so there is no second implementation to drift.
+with a marker at every cut, the shot camera as a black frustum, and green boxes
+on whatever the current shot declared as its `hero`. Switch `camera` to
+"shot camera" to see the exact render, back to "free orbit" to understand it.
+It reuses `def.make()`, `def.pose()` and `applyFrame` — the same pure functions
+Remotion renders, so there is no second implementation to drift.
 
-The right-hand panel is **lil-gui**, generated entirely from the knobs each
-scene **declares** — the dome's apex, the speed at the midpoint of a rise, how
+Everything is in **one lil-gui**: which scene, which camera, which overlays,
+the scene's knobs, and the ways out. There is deliberately no second set of
+controls — a viewer with a toolbar *and* a panel makes you learn where each
+thing lives. The knob section is generated entirely from what each scene
+**declares** — the dome's apex, the speed at the midpoint of a rise, how
 far the clones fan out. No control is written by hand: a scene that declares a
 knob gets one, and each knob's `note` becomes its tooltip. Turning one rebuilds
 the scene through the same `def.make()` the renderer calls and redraws the
