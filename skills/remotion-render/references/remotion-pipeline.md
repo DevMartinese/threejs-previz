@@ -278,48 +278,29 @@ film's fps, so a 24 fps scene inside a 30 fps film runs fast *and* every cut aft
 it lands early — a drift that compounds and looks like a timing mistake in the
 animation rather than a configuration one.
 
-## 7b. Authoring object motion: `animate` or an anime.js timeline
+## 7b. Authoring object motion
 
 Object motion is a pure function of the frame, and `defineScene` resolves it
 in exactly one place — `def.pose(ctx, frame)` — shared by the audit gate, the
 Remotion component and the inspector, so the three cannot drift.
 
-Two ways to write it:
-
 ```js
-// by hand: full control, every value derived from the frame
-animate: ({ ctx, frame }) => { ... }
-
-// or declaratively, with anime.js — built ONCE, then only seeked
-timeline: ({ ctx }) => createTimeline({ autoplay: false })
-  .add(ctx.get('PRP_box'), { x: 3, rotateY: 360, duration: 2000, ease: 'inOutQuad' }, 0),
+animate: ({ ctx, frame }) => { ... }   // every value derived from the frame
 ```
 
-The adapter (`import 'animejs/adapters/three'`) is a built-in subpath, needs
-no extra package, and flattens Three's nested fields onto plain names (`x`,
-`rotateY` in degrees, `opacity`).
+A tween library was evaluated for this and rejected on measurement, not
+taste: across the scenes in this repo only 6–9% of the animation code is
+tween-shaped. The dominant idiom is "hide every dynamic object, then the
+active cut shows what it needs" — a switch over dozens of objects, not a set
+of keyframes — and the rest is procedural placement (modulo wrapping,
+orbits, arcs derived from anchors) that is not a tween in any form. One way
+to move an object beats two.
 
-**Why a tween library is allowed here at all**, given the no-clocks rule:
-`.seek()` was measured to be independent of call order, so Remotion's
-out-of-order workers get the same frame every time. `timeline` is duck-typed
-— anything with `.seek(ms)` qualifies, there is no dependency on a particular
-library — and `npm test` (`test/timeline-determinism.mjs`) is the experiment,
-kept in the repo so the claim stays checkable rather than remembered.
-
-Two conditions, both measured:
-
-**Build the timeline once, inside `make()`, and only seek it.** Rebuild it per
-frame and the guarantee is gone — the same rule that governs geometry.
-
-**Avoid an explicit `[from, to]` that starts at a non-zero offset.** It does
-not restore its own `from` when seeked backwards past its start: sequential
-order shows the object's constructed value, shuffled order shows the tween's
-`from` left over from a later seek — 6 frames of 48 in the test. Pinning the
-start with a keyframe at 0 looks like a fix and is not (it still skews under
-shuffled, as opposed to merely reversed, order). What works is either moving
-the tween to time 0, or using an absolute target, which is safe at any
-offset. Absolute targets, relative `'+='`, implicit-from and even boolean
-tracks like `visible` are all order-independent.
+If you ever do reach for one: whatever drives the scene must be a pure
+function of the frame, which for a timeline means **it must seek
+identically regardless of call order** — Remotion's workers do not ask for
+frames in sequence. That is a property to measure before trusting, not to
+assume.
 
 ## 8. Rendering
 

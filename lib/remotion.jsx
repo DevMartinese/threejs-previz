@@ -103,8 +103,8 @@ export function PrevizStage({ ctx, list, frame, visibility = [],
   useLayoutEffect(() => {
     if (visibility.length) blk.applyVisibility(ctx.scene, visibility, frame);
     // Object motion is a pure function of the frame, same contract as the
-    // camera. `def.pose` is the single resolver (anime.js timeline seek plus
-    // the scene's own animate), shared with the audit gate and the inspector.
+    // camera. `def.pose` is the single resolver, shared with the audit gate
+    // and the inspector, so the three cannot drift apart.
     if (pose) pose(ctx, frame);
     else if (animate) animate({ ctx, frame, fps });
     applyFrame(camera, list, frame);

@@ -120,10 +120,9 @@ real scene rather than a stub.
 - **Build once per worker, move only the camera — and the poses.** `def.make()`
   runs in a `useMemo`; CSG and BVH are build-time work. Objects that move do it
   through `defineScene({ animate })` — a pure function `({ ctx, frame }) => …`
-  — or `defineScene({ timeline })`, an anime.js timeline built once and only
-  seeked (`.seek()` is measured to be order-independent, so out-of-order
-  workers agree). Either way `def.pose(ctx, frame)` is the single resolver
-  the gate, the renderer and the inspector all share.
+  that poses everything from scratch each frame. `def.pose(ctx, frame)` is the
+  single resolver the gate, the renderer and the inspector all share, so the
+  three cannot drift apart.
 - **Declare a hero per shot; `hero: []` marks a transitional entry.** A can
   erupting through the bottom of frame, a close travel along a product, a
   fly-through — nothing whole stays in frame there *by design*. Framing is
