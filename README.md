@@ -17,10 +17,21 @@ handheld — authored entirely in code, gated by audits, rendered end to end.
 
 ```bash
 npm install
-npm run audit     # the gate: six checks per shot, headless, ~150 ms for 900 frames
+npm run audit     # the gate: eight checks per shot, headless, ~150 ms for 900 frames
 npm run render    # audit && render the 30 s roundtable scene to out/
-npm run studio    # scrub the timeline in Remotion Studio
+npm run studio    # scrub the timeline in Remotion Studio (the shot's view)
+npm run inspect   # the inspector: orbit the scene, see the camera's path
 ```
+
+`studio` shows you what the shot sees. `inspect` shows you the shot itself —
+free orbit, the camera's whole trajectory drawn as a line coloured per shot
+with a marker at every cut, the shot camera as a moving frustum, and green
+boxes on whatever the current shot declared as its `hero`. Toggle to
+"shot camera" to see the exact render, back to "free orbit" to understand
+it. It is READ-ONLY by design: the audits stay the authority, the inspector
+explains their findings. It reuses `def.make()`, `def.pose()` and
+`applyFrame` — the same pure functions Remotion renders, so there is no
+second implementation to drift.
 
 `npm run render` refuses to start if any audit fails. That is the point: a
 failed shot costs milliseconds to find, not a render measured in minutes.
@@ -37,6 +48,7 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │   ├── remotion.jsx         the COMPONENT:  sceneComposition -> <Composition>
 │   ├── film.js              the EDIT:       defineFilm — plain JS, Node loads it
 │   ├── film.jsx             the EDIT's COMPONENT: filmComposition (live/stitch)
+│   ├── inspector.jsx        the VIEWER:     orbit the scene, draw the path
 │   └── auditScenes.mjs      the GATE:       exits non-zero if a shot fails
 ├── src/
 │   ├── index.jsx            registerRoot
@@ -46,6 +58,7 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │       ├── canspot.js       13-cut product piece: CSG slices, clone
 │       │                    choreography, object animation, 16 audited entries
 │       └── demo.js          the smallest complete scene (2 characters, 2 shots)
+├── inspector/               the Vite app behind `npm run inspect`
 ├── docs/                    the method, written up
 └── skills/                  the same material packaged as Claude skills
 ```
@@ -68,7 +81,7 @@ real scene rather than a stub.
 - **Pure function of the frame.** No clocks, no `useFrame`, no
   `Math.random()` (there is a seeded `rng`). Remotion renders frames out of
   order across workers; anything with its own state flickers.
-- **Measure, don't eyeball.** Six checks per shot, all headless:
+- **Measure, don't eyeball.** Eight checks per shot, all headless:
   1. **Collisions** — triangle-exact via BVH, on subjects.
   2. **Framing** — the shot's `hero` projected to NDC; is it inside the frame?
   3. **Floor** — nothing sinks through the ground plane.
@@ -86,6 +99,10 @@ real scene rather than a stub.
      `ctx.anchor(name, localPoint)` (world positions through the scene graph,
      never typed trigonometry), then declare them in `attachments:` and the
      audit reports pair, distance and frame when a chain disconnects.
+  8. **Camera path** — position step, view turn AND roll against the shot's
+     own median: a discontinuous path reads exactly like passing through an
+     object, and a gaze along the camera's own up axis spins the frame while
+     position and direction stay smooth.
 
   Every shot declares its `hero` — what must stay in frame. `hero: []` marks a
   transitional shot: framing and occlusion waived, everything else still runs.
@@ -102,9 +119,11 @@ real scene rather than a stub.
   film, or a Remotion worker can build many scenes in one process.
 - **Build once per worker, move only the camera — and the poses.** `def.make()`
   runs in a `useMemo`; CSG and BVH are build-time work. Objects that move do it
-  through `defineScene({ animate })`: a pure function `({ ctx, frame }) => …`
-  that poses everything from scratch each frame — the audit gate runs it at
-  every sampled frame, so the audits measure the scene exactly as it renders.
+  through `defineScene({ animate })` — a pure function `({ ctx, frame }) => …`
+  — or `defineScene({ timeline })`, an anime.js timeline built once and only
+  seeked (`.seek()` is measured to be order-independent, so out-of-order
+  workers agree). Either way `def.pose(ctx, frame)` is the single resolver
+  the gate, the renderer and the inspector all share.
 - **Declare a hero per shot; `hero: []` marks a transitional entry.** A can
   erupting through the bottom of frame, a close travel along a product, a
   fly-through — nothing whole stays in frame there *by design*. Framing is

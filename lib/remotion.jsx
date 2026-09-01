@@ -59,7 +59,7 @@ export function sceneComponent(def) {
       <ThreeCanvas width={width} height={height}>
         <PrevizStage ctx={ctx} list={def.list} frame={frame}
                      visibility={def.visibility} subjectSize={def.subjectSize}
-                     filmGauge={def.filmGauge} animate={def.animate} fps={def.fps} />
+                     filmGauge={def.filmGauge} pose={def.pose} fps={def.fps} />
       </ThreeCanvas>
     );
   }
@@ -79,7 +79,7 @@ export function sceneComposition(def) {
  */
 export function PrevizStage({ ctx, list, frame, visibility = [],
                               subjectSize = 1, filmGauge = 36,
-                              animate = null, fps = 30 }) {
+                              pose = null, animate = null, fps = 30 }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const rootScene = useThree((s) => s.scene);
@@ -102,11 +102,13 @@ export function PrevizStage({ ctx, list, frame, visibility = [],
 
   useLayoutEffect(() => {
     if (visibility.length) blk.applyVisibility(ctx.scene, visibility, frame);
-    // Object animation is a pure function of the frame, same contract as the
-    // camera: animate({ ctx, frame }) poses everything from scratch, no state.
-    if (animate) animate({ ctx, frame, fps });
+    // Object motion is a pure function of the frame, same contract as the
+    // camera. `def.pose` is the single resolver (anime.js timeline seek plus
+    // the scene's own animate), shared with the audit gate and the inspector.
+    if (pose) pose(ctx, frame);
+    else if (animate) animate({ ctx, frame, fps });
     applyFrame(camera, list, frame);
-  }, [camera, ctx, list, frame, visibility, animate, fps]);
+  }, [camera, ctx, list, frame, visibility, pose, animate, fps]);
 
   // Mount the WHOLE blocking scene as one primitive, never group by group:
   // R3F's <primitive> REPARENTS what it mounts, and mounting the groups

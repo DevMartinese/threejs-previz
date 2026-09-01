@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Cinematic previz in code: Three.js blocking scenes, a camera-move catalog, measured audits, and deterministic Remotion renders — motion references for generative video models.",
+  "description": "Cinematic previz in code: Three.js blocking scenes, a camera-move catalog, measured audits, and deterministic Remotion renders \u2014 motion references for generative video models.",
   "scripts": {
     "studio": "remotion studio",
     "audit": "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
@@ -12,18 +12,24 @@
     "render:film": "npm run audit && remotion render feature out/feature.mp4",
     "render:film:stitch": "npm run audit && remotion render opening public/opening.mp4 && remotion render roundtable public/roundtable.mp4 && remotion render feature-stitch out/feature-stitch.mp4",
     "still": "remotion still roundtable out/still.png --frame=180",
-    "frames": "npm run audit && remotion render roundtable out/frames --sequence"
+    "frames": "npm run audit && remotion render roundtable out/frames --sequence",
+    "inspect": "vite --config inspector/vite.config.js"
   },
   "dependencies": {
     "@react-three/fiber": "^8.17.10",
     "@remotion/cli": "^4.0.0",
     "@remotion/three": "^4.0.0",
     "@remotion/transitions": "^4.0.519",
+    "animejs": "^4.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remotion": "^4.0.0",
     "three": "0.185.0",
     "three-bvh-csg": "0.0.18",
     "three-mesh-bvh": "0.9.14"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react-swc": "^4.3.3",
+    "vite": "^8.2.2"
   }
 }

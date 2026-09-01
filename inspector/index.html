@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>previz inspector</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #17181a; color: #d8d8d8;
+             font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      #app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+      header, footer { padding: 8px 12px; background: #202225; border-color: #2e3033;
+                       display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+      header { border-bottom: 1px solid #2e3033; }
+      footer { border-top: 1px solid #2e3033; }
+      #stage { position: relative; overflow: hidden; display: grid; place-items: center;
+               background: #101113; }
+      canvas { display: block; }
+      select, button { background: #2b2d31; color: #e6e6e6; border: 1px solid #3a3d42;
+                       border-radius: 4px; padding: 4px 8px; font: inherit; cursor: pointer; }
+      button.on { background: #3f6c8e; border-color: #4f86ad; }
+      input[type=range] { flex: 1; min-width: 220px; accent-color: #3f6c8e; }
+      .dim { color: #8a8d92; }
+      .tag { padding: 1px 6px; border-radius: 3px; background: #2b2d31; }
+      label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./main.jsx"></script>
+  </body>
+</html>

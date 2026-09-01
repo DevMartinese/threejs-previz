@@ -302,7 +302,33 @@ mistake for a composition choice, and caught immediately by a framing audit.
 
 ---
 
-## 18. Cinema Studio mapping
+## 18. Craft notes the audits cannot make
+
+The audits measure geometry: does it fit, does it collide, does it jump, can
+you see it. They cannot tell you whether a move *feels* right. When the note
+is "it's coarse", "it drags", "it isn't fluid", these are the terms for what
+is actually wrong — and, more usefully, the measurement that confirms it.
+Every row below came out of diagnosing a real note on this pipeline.
+
+| The note | The term | What to measure |
+|---|---|---|
+| "it's abrupt at the cut" | **Momentum** — motion that carries velocity across an interruption | the per-frame step on the last frame of A vs the first of B. A dead stop reads as coarse: one case measured 0.5% of full speed going into every cut |
+| "the change doesn't land" | **Continuity transition** — a change punctuated enough to read as intentional | the length of the transition beat vs the piece's normal rhythm. A cut hidden *exactly* as well as a routine event reads as a glitch, not a transition |
+| "it drags" | **Perceptual duration** | how many frames sit below ~40% of full speed. A deliberate slowdown is the shot; an unintended one is dead air |
+| "it feels mechanical" | **Asymmetric easing** — different rates in and out | compare the in and out slopes. Symmetric curves read as machinery |
+| "something jumped / went through an object" | (a discontinuity) | the camera-path audit: step and view-turn against the shot's own median |
+| "the image flipped" | (the `lookAt` singularity) | the roll check — a gaze exactly along the up axis spins the frame while position and direction stay smooth |
+| "you can see the next scene coming" | **Reveal** vs approach | project the next subject's bounds and count frames where it is on screen from far away. A world should appear, not be flown toward |
+| "I lose track of what I'm looking at" | **Spatial consistency** | identity colour already does this work — the same red block in three worlds is the anchor that survives the cut |
+
+Two principles worth keeping in view, both from UI motion but true here:
+**purposeful animation** (a move should orient, reveal or relate — a move
+that only decorates is the one to cut) and **frequency of use** (the more
+often a beat repeats, the subtler it should be — which is why a transition
+that happens twice can afford to be bigger than a floor crossing that
+happens twenty times).
+
+## 19. Cinema Studio mapping
 
 The Higgsfield Cinema Studio parameters map cleanly onto this system, which is
 useful when the user asks for a *look* rather than a named move.

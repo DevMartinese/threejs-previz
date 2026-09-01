@@ -278,6 +278,36 @@ film's fps, so a 24 fps scene inside a 30 fps film runs fast *and* every cut aft
 it lands early — a drift that compounds and looks like a timing mistake in the
 animation rather than a configuration one.
 
+## 7b. Authoring object motion: `animate` or an anime.js timeline
+
+Object motion is a pure function of the frame, and `defineScene` resolves it
+in exactly one place — `def.pose(ctx, frame)` — shared by the audit gate, the
+Remotion component and the inspector, so the three cannot drift.
+
+Two ways to write it:
+
+```js
+// by hand: full control, every value derived from the frame
+animate: ({ ctx, frame }) => { ... }
+
+// or declaratively, with anime.js — built ONCE, then only seeked
+timeline: ({ ctx }) => createTimeline({ autoplay: false })
+  .add(ctx.get('PRP_box'), { x: 3, rotateY: 360, duration: 2000, ease: 'inOutQuad' }, 0),
+```
+
+The adapter (`import 'animejs/adapters/three'`) is a built-in subpath, needs
+no extra package, and flattens Three's nested fields onto plain names (`x`,
+`rotateY` in degrees, `opacity`).
+
+**Why a tween library is allowed here at all**, given the no-clocks rule:
+`.seek()` was measured to be independent of call order. Forty-eight frames
+came out identical across sequential, shuffled and reverse seeking, for
+absolute, relative (`'+=5'`), explicit `[from, to]` and implicit-from values
+alike — so Remotion's out-of-order workers get the same frame every time.
+The one condition is the same one that governs geometry: **build the timeline
+once, inside `make()`, and only seek it**. Rebuild it per frame and the
+guarantee is gone.
+
 ## 8. Rendering
 
 ```bash
