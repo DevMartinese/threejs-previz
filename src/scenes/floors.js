@@ -24,62 +24,89 @@ const lerp = (a, b, u) => a + (b - a) * u;
 const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
 const smooth = (t) => { const c = clamp01(t); return c * c * (3 - 2 * c); };
 
-/* ------------------------------------------------------------- the move -- */
-// The pass STARTS AND ENDS INSIDE A SLAB (4 -> 24, both slab centres), so
-// each take opens and closes on darkness and the hard cut lands inside that
-// flash — the world changes while the frame is black.
-const Y0 = 4, TRAVEL = 20;
-const LOOK = 10;                        // how far ahead the fixed gaze sits
+/* ------------------------------------------------------------- the move --
+ * Everything here is derived from the parameters, not written down twice.
+ * That matters more in this scene than in any other: the hero's height is the
+ * INTEGRAL of the speed profile at its midpoint, so a knob that reshapes the
+ * profile moves the hero. Leaving MID_Y as a constant would have let the two
+ * drift apart the first time anyone touched a slider — the hero would sit at
+ * the height the OLD profile reached, and the one shot with an enforced hero
+ * would fail for a reason that looks like nothing to do with the knob.
+ */
 
 /**
- * Speed as a fraction of full speed, symmetric about the midpoint.
+ * The whole geometry of one pass, for one set of parameters.
  *
- * It holds FULL speed at both ends rather than ramping from and to zero.
- * Ramping to zero made the camera stop dead before every cut and crawl back
- * up afterwards (measured: 0.0010 per frame at the last frame of a take,
- * 0.5% of full speed) — the takes read as coarse and slow to change. The
- * acceleration the move needs is the one OUT of the mid-pass slowdown; the
- * ends carry momentum straight through the cut.
+ * The pass STARTS AND ENDS INSIDE A SLAB (both are slab centres), so each take
+ * opens and closes on darkness and the hard cut lands inside that flash — the
+ * world changes while the frame is black. That invariant is why `slabGap` is
+ * the knob and the travel is derived from it, rather than the other way round:
+ * a travel you could set independently is a travel you could set to a value
+ * that ends the pass in mid-air.
  */
-const SPEED = (t) => {
-  if (t <= 0.15) return 1;                                      // enter at speed
-  if (t < 0.5) return lerp(1, 0.15, smooth((t - 0.15) / 0.35)); // slow to 15%
-  if (t < 0.85) return lerp(0.15, 1, smooth((t - 0.5) / 0.35)); // back to full
-  return 1;                                                     // leave at speed
-};
+function profile(p) {
+  const SLABS = [1, 2, 3, 4, 5, 6].map((i) => i * p.slabGap);
+  const Y0 = SLABS[0], TRAVEL = SLABS[5] - SLABS[0];
+  // The two slabs the pass begins and ends inside are THICKER than the four it
+  // crosses on the way. Making the cut's flash the same length as every other
+  // floor pass hid it too well: the world simply swapped with no punctuation,
+  // which reads as a glitch rather than a transition. A deliberate beat of
+  // darkness at the boundary — twice any normal crossing — is what makes the
+  // change land.
+  const SLAB_T = [p.boundarySlab, p.crossSlab, p.crossSlab,
+                  p.crossSlab, p.crossSlab, p.boundarySlab];
 
-/** Position is the normalised integral of SPEED — trapezoid, 4000 steps. */
-const N = 4000;
-const TABLE = new Float64Array(N + 1);
-for (let i = 1; i <= N; i++) {
-  TABLE[i] = TABLE[i - 1] + ((SPEED((i - 1) / N) + SPEED(i / N)) / 2) / N;
+  /**
+   * Speed as a fraction of full speed, symmetric about the midpoint.
+   *
+   * It holds FULL speed at both ends rather than ramping from and to zero.
+   * Ramping to zero made the camera stop dead before every cut and crawl back
+   * up afterwards (measured: 0.0010 per frame at the last frame of a take,
+   * 0.5% of full speed) — the takes read as coarse and slow to change. The
+   * acceleration the move needs is the one OUT of the mid-pass slowdown; the
+   * ends carry momentum straight through the cut.
+   */
+  const hold = p.holdSpeed, mid = p.midSpeed, ramp = 0.5 - hold;
+  const SPEED = (t) => {
+    if (t <= hold) return 1;                                 // enter at speed
+    if (t < 0.5) return lerp(1, mid, smooth((t - hold) / ramp));
+    if (t < 1 - hold) return lerp(mid, 1, smooth((t - 0.5) / ramp));
+    return 1;                                                // leave at speed
+  };
+
+  // Position is the normalised integral of SPEED — trapezoid, 4000 steps.
+  const N = 4000;
+  const TABLE = new Float64Array(N + 1);
+  for (let i = 1; i <= N; i++) {
+    TABLE[i] = TABLE[i - 1] + ((SPEED((i - 1) / N) + SPEED(i / N)) / 2) / N;
+  }
+  const TOTAL = TABLE[N];
+  const travelled = (t) => {
+    const x = clamp01(t) * N, i = Math.floor(x);
+    return lerp(TABLE[i], TABLE[Math.min(N, i + 1)], x - i) / TOTAL;
+  };
+
+  // Where the camera lands at the midpoint of the speed profile. Derived.
+  const midY = Y0 + TRAVEL * travelled(0.5);
+
+  // The one move, shared verbatim by all three takes.
+  const pass = (t) => {
+    const y = Y0 + TRAVEL * travelled(t);
+    return { position: [0, y, 0], target: [0, y, -p.look], fov: 45, roll: 0 };
+  };
+
+  // A storey sits ON the top face of the slab it dresses, so it follows the
+  // slabs rather than repeating their arithmetic. Deriving it also settled a
+  // 5 cm float the hand-written list had on the ground storey alone — the
+  // four above it were already exactly on their slab.
+  const STOREYS = SLABS.slice(0, 5).map((y, i) => y + SLAB_T[i] / 2);
+
+  return { SLABS, SLAB_T, STOREYS, Y0, TRAVEL, midY, pass };
 }
-const TOTAL = TABLE[N];
-const travelled = (t) => {
-  const x = clamp01(t) * N, i = Math.floor(x);
-  return lerp(TABLE[i], TABLE[Math.min(N, i + 1)], x - i) / TOTAL;
-};
 
-/** Where the camera lands at the midpoint of the speed profile. Derived. */
-export const MID_Y = Y0 + TRAVEL * travelled(0.5);
-
-/** The one move, shared verbatim by all three takes. */
-const pass = (t) => {
-  const y = Y0 + TRAVEL * travelled(t);
-  return { position: [0, y, 0], target: [0, y, -LOOK], fov: 45, roll: 0 };
-};
-
-/* ------------------------------------------------------------- the world -- */
-const SLABS = [4, 8, 12, 16, 20, 24];   // six, every 4 units
-// The two slabs the pass begins and ends inside are THICKER than the four it
-// crosses on the way. Making the cut's flash the same length as every other
-// floor pass hid it too well: the world simply swapped with no punctuation,
-// which reads as a glitch rather than a transition. A deliberate ~0.5 s of
-// darkness at the boundary — twice any normal crossing — is the beat that
-// makes the change land.
-const SLAB_T = [1.4, 0.6, 0.6, 0.6, 0.6, 1.4];
-const HERO_H = 3.2;                     // fits the 12..16 storey with air
-const STOREYS = [4.75, 8.3, 12.3, 16.3, 20.3];  // every storey the pass crosses
+/** The default pass, for anything outside the scene that wants the numbers. */
+export const MID_Y = profile({ slabGap: 4, boundarySlab: 1.4, crossSlab: 0.6,
+                               holdSpeed: 0.15, midSpeed: 0.15, look: 10 }).midY;
 // Six dressing spots per storey, spread across the frame and in depth so a
 // world reads at any height — including the hero's storey, where they flank
 // the block without crossing it (the occlusion audit checks that).
@@ -101,7 +128,8 @@ const ignore = [
   ['PRP_of_*', 'PRP_of_*'], ['PRP_ap_*', 'PRP_ap_*'], ['PRP_wh_*', 'PRP_wh_*'],
 ];
 
-function build({ ctx, geo }) {
+function build({ ctx, geo, p }) {
+  const { SLABS, SLAB_T, STOREYS, midY } = profile(p);
   for (const k of Object.keys(PROPS)) PROPS[k].length = 0;
 
   ctx.part('ENV_ground', geo.box({ x: 40, y: 0.2, z: 40 }), 'ground', ctx.groups.ENV)
@@ -123,9 +151,10 @@ function build({ ctx, geo }) {
   });
 
   // The hero: centred on the height the speed profile actually reaches at
-  // t=0.5, dead on the camera's fixed view axis.
-  ctx.part('PRP_hero', geo.box({ x: 1.6, y: HERO_H, z: 1.6 }), 'hero')
-    .position.set(0, MID_Y, -LOOK);
+  // t=0.5, dead on the camera's fixed view axis. Both come from `profile(p)`,
+  // so reshaping the speed curve carries the hero with it.
+  ctx.part('PRP_hero', geo.box({ x: 1.6, y: p.heroHeight, z: 1.6 }), 'hero')
+    .position.set(0, midY, -p.look);
 
   const put = (take, name, g, id, [x, y, z], ry = 0) => {
     const m = ctx.part(`PRP_${take}_${name}`, g, id);
@@ -194,20 +223,19 @@ function animate({ ctx, frame }) {
 }
 
 /* ------------------------------------------------------------- the shots -- */
-const win = (a, b) => (u) => pass(a + (b - a) * u);
-const FOCAL = 35;
 // the midpoint window: 12 frames centred on the pass's t = 0.5
 const M0 = 114 / 240, M1 = 126 / 240;
 
-const take = (i, label) => {
+const take = (p, pass, i, label) => {
   const b = i * 240;
+  const win = (a, c) => (u) => pass(a + (c - a) * u);
   return [
-    { name: `T${i + 1}_${label}_up`, from: b, to: b + 114, focalLength: FOCAL,
+    { name: `T${i + 1}_${label}_up`, from: b, to: b + 114, focalLength: p.focal,
       easing: 'linear', hero: [], clearance: 0, move: win(0, M0) },
     // the only shot with an enforced hero: at the midpoint it must be in frame
-    { name: `T${i + 1}_${label}_mid`, from: b + 114, to: b + 126, focalLength: FOCAL,
+    { name: `T${i + 1}_${label}_mid`, from: b + 114, to: b + 126, focalLength: p.focal,
       easing: 'linear', hero: 'PRP_hero', joins: true, move: win(M0, M1) },
-    { name: `T${i + 1}_${label}_out`, from: b + 126, to: b + 240, focalLength: FOCAL,
+    { name: `T${i + 1}_${label}_out`, from: b + 126, to: b + 240, focalLength: p.focal,
       easing: 'linear', hero: [], clearance: 0, joins: true, move: win(M1, 1) },
   ];
 };
@@ -220,7 +248,27 @@ export default defineScene({
   subjectSize: 2.5,
   identity,
   ignore,
+  params: {
+    midSpeed: { value: 0.15, min: 0.02, max: 1, step: 0.01, unit: '×',
+      note: 'speed at the midpoint as a fraction of full — this is the floors effect; at 1 the pass is a constant rise' },
+    holdSpeed: { value: 0.15, min: 0.02, max: 0.4, step: 0.01,
+      note: 'how much of each end holds full speed. Do not take it to zero: ramping from a standstill is what made the cuts read as coarse' },
+    slabGap: { value: 4, min: 2.5, max: 6, step: 0.1, unit: 'm',
+      note: 'spacing of the floors; the travel is six of these, so the pass always starts and ends inside a slab' },
+    boundarySlab: { value: 1.4, min: 0.6, max: 3, step: 0.1, unit: 'm',
+      note: 'thickness of the two slabs the takes begin and end inside — this is the length of the dark beat at the cut' },
+    crossSlab: { value: 0.6, min: 0.2, max: 1.6, step: 0.05, unit: 'm',
+      note: 'thickness of the four the pass crosses on the way; keep it under the boundary or the cut stops reading as punctuation' },
+    look: { value: 10, min: 5, max: 18, step: 0.5, unit: 'm',
+      note: 'how far ahead the fixed gaze sits — the hero sits on that axis, so this moves it too' },
+    heroHeight: { value: 3.2, min: 1.5, max: 5, step: 0.1, unit: 'm' },
+    focal: { value: 35, min: 18, max: 60, step: 1, unit: 'mm' },
+  },
   build,
   animate,
-  shots: [...take(0, 'office'), ...take(1, 'apt'), ...take(2, 'warehouse')],
+  shots: (p) => {
+    const { pass } = profile(p);
+    return [...take(p, pass, 0, 'office'), ...take(p, pass, 1, 'apt'),
+            ...take(p, pass, 2, 'warehouse')];
+  },
 });

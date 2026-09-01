@@ -39,7 +39,24 @@ export const polar = (angleDeg, r, y = 0) =>
   [Math.sin(rad(angleDeg)) * r, y, Math.cos(rad(angleDeg)) * r];
 
 /** A character's head centre in world space — the thing shots target. */
-export const headPos = (colour) => polar(SEATS[colour], SEAT_R, 1.216);
+export const headPos = (colour, r = SEAT_R) => polar(SEATS[colour], r, 1.216);
+
+/**
+ * The knobs that belong to the ROOM rather than to a camera.
+ *
+ * They are exported because `build` is: opening.js reuses this room wholesale,
+ * and a build that reads a parameter its scene never declared would get
+ * `undefined` and quietly produce NaN geometry. A shared build means a shared
+ * declaration — spread this into any scene that borrows it.
+ */
+export const roomParams = {
+  seatRadius: { value: SEAT_R, min: 1.05, max: 1.9, step: 0.01, unit: 'm',
+    label: 'seat circle',
+    note: 'everything derives from this — the figures, the chairs and the heads the gaze hands off between' },
+  tableRadius: { value: TABLE_R, min: 0.5, max: 1.4, step: 0.02, unit: 'm',
+    label: 'table radius',
+    note: 'the tabletop is the wide shot\'s hero, so widening it tightens the framing margin' },
+};
 
 export const identity = {
   grey: '#9a9a9a',
@@ -63,7 +80,8 @@ export const ignore = [
 ];
 
 /** The room + cast. Shared by every scene/vista built on this blocking. */
-export function build({ ctx, geo }) {
+export function build({ ctx, geo, p }) {
+  const seatR = p.seatRadius, tableR = p.tableRadius;
   // The interior: neutral grey floor and a round wall so the space reads.
   ctx.part('ENV_floor', geo.disc({ radius: 4.5 }), 'grey', ctx.groups.ENV);
   ctx.part('ENV_wall', geo.wall({ radius: 4.5, height: 3, thickness: 0.06 }),
@@ -76,13 +94,13 @@ export function build({ ctx, geo }) {
   // includes the base fails the audit for the wrong reason. Same logic as
   // figure() keeping the head separate.
   const top = ctx.part('PRP_table_top',
-    geo.cone({ rBottom: TABLE_R, rTop: TABLE_R, h: 0.04 }), 'wood');
+    geo.cone({ rBottom: tableR, rTop: tableR, h: 0.04 }), 'wood');
   top.position.y = TABLE_H - 0.02;
   const leg = ctx.part('PRP_table_leg',
     geo.cone({ rBottom: 0.07, rTop: 0.07, h: TABLE_H - 0.04 }), 'wood');
   leg.position.y = (TABLE_H - 0.04) / 2;
   const base = ctx.part('PRP_table_base',
-    geo.cone({ rBottom: 0.32, rTop: 0.32, h: 0.03 }), 'wood');
+    geo.cone({ rBottom: tableR * 0.36, rTop: tableR * 0.36, h: 0.03 }), 'wood');
   base.position.y = 0.015;
 
   // One seated character per identity colour: a rig pivot on the seat circle,
@@ -90,7 +108,7 @@ export function build({ ctx, geo }) {
   // framing hero in a way a whole body cannot be. Hands rest toward the table
   // (figure() puts a seated figure's arms forward).
   for (const [colour, angle] of Object.entries(SEATS)) {
-    const pos = polar(angle, SEAT_R);
+    const pos = polar(angle, seatR);
     const rig = ctx.pivot(`CHR_${colour}_rig`, pos, ctx.groups.CHR);
     rig.rotation.y = rad(angle) + Math.PI;       // figures face +z locally
 
@@ -125,15 +143,21 @@ const otsCrawl = (behind, { offset = 12, crawl = 3, r = 2.05, y = 0.92 } = {}) =
  * operator's body and the operator's attention as separate layers. `seconds`
  * is the shot length, so the wave frequencies read in Hz. No fast jitter
  * anywhere: the sway sits at ~0.2 Hz, the tremor at ~1.5 Hz and millimetres. */
-const alive = (move, seconds, { sway = 0.018, driftAmp = 0.012, breathe = 0.008,
-                                tremor = 0.003 } = {}) =>
+// `g` scales all four layers together — the one knob for "how alive is the
+// operator". Scaling them TOGETHER is deliberate: what makes this read as a
+// person rather than as wiggle is the ratio between the slow sway and the fast
+// tremor, and a panel with four independent sliders is a panel that invites
+// you to break it. At 0 the move is locked off, which is the honest way to see
+// what the handheld is actually contributing.
+const alive = (move, seconds, g = 1, { sway = 0.018, driftAmp = 0.012,
+                                       breathe = 0.008, tremor = 0.003 } = {}) =>
   handheld(
     handheld(
-      drift(move, { duration: seconds, amp: driftAmp, freq: 0.16,
-                    breathe, breatheFreq: 0.24 }),
-      { duration: seconds, posAmp: sway, rotAmp: 0.006, freq: 0.2 },
+      drift(move, { duration: seconds, amp: driftAmp * g, freq: 0.16,
+                    breathe: breathe * g, breatheFreq: 0.24 }),
+      { duration: seconds, posAmp: sway * g, rotAmp: 0.006 * g, freq: 0.2 },
     ),
-    { duration: seconds, posAmp: tremor, rotAmp: 0.002, freq: 1.5 },
+    { duration: seconds, posAmp: tremor * g, rotAmp: 0.002 * g, freq: 1.5 },
   );
 
 export default defineScene({
@@ -144,8 +168,24 @@ export default defineScene({
   subjectSize: 2.5,
   identity,
   ignore,
+  params: {
+    ...roomParams,
+    handheld: { value: 1, min: 0, max: 3, step: 0.05, unit: '×',
+      note: 'scales the operator — sway, drift, breathing and tremor together. 0 is locked off' },
+    orbitRadius: { value: 3.0, min: 2.2, max: 4.2, step: 0.05, unit: 'm',
+      note: 'the wide orbit. Tuned against the audit twice: at 2.7 the tabletop left frame at f144' },
+    orbitHeight: { value: 1.2, min: 0.6, max: 2.4, step: 0.05, unit: 'm' },
+    orbitArc: { value: 110, min: 40, max: 200, step: 5, unit: 'deg',
+      note: 'starts behind red and passes behind cyan; a wider arc keeps going past purple' },
+    otsRadius: { value: 2.05, min: 1.6, max: 2.8, step: 0.05, unit: 'm',
+      label: 'OTS radius' },
+    otsOffset: { value: 12, min: 4, max: 28, step: 1, unit: 'deg',
+      label: 'OTS offset',
+      note: 'azimuth off the shoulder. Too small and the shot is through the head, not over it — the occlusion audit is what catches that' },
+    otsFocal: { value: 55, min: 35, max: 85, step: 1, unit: 'mm', label: 'OTS lens' },
+  },
   build,
-  shots: [
+  shots: (p) => [
     // 1 — slow orbit, camera slightly above the table, wide lens. Starts behind
     // red, passes behind cyan mid-arc, stops short of purple (arc 110°). The
     // gaze hands off face to face across the table — yellow → blue → green —
@@ -165,23 +205,27 @@ export default defineScene({
       // Handheld a touch livelier here than in the dialogue cuts.
       move: alive(
         retarget(
-          moves.orbit360({ radius: 3.0, height: 1.2, startAngle: 0, arc: rad(110) }),
-          { targets: [headPos('yellow'), headPos('blue'), headPos('green')] },
+          moves.orbit360({ radius: p.orbitRadius, height: p.orbitHeight,
+                           startAngle: 0, arc: rad(p.orbitArc) }),
+          { targets: [headPos('yellow', p.seatRadius), headPos('blue', p.seatRadius),
+                      headPos('green', p.seatRadius)] },
         ),
-        15, { sway: 0.032, driftAmp: 0.045, breathe: 0.014, tremor: 0.0045 },
+        15, p.handheld, { sway: 0.032, driftAmp: 0.045, breathe: 0.014, tremor: 0.0045 },
       ) },
 
     // 2 — cyan over blue's shoulder, ~3 s. Below shoulder height, barely
     // crawling sideways, handheld completely lazy. Everyone else is supposed
     // to leave frame: hero cyan.
-    { name: 'SC02_ots_cyan', from: 360, to: 432, focalLength: 55, easing: 'linear',
+    { name: 'SC02_ots_cyan', from: 360, to: 432, focalLength: p.otsFocal, easing: 'linear',
       hero: 'CHR_cyan_head',
-      move: alive(moves.truck({ ...otsCrawl('blue'), target: headPos('cyan') }), 3) },
+      move: alive(moves.truck({ ...otsCrawl('blue', { offset: p.otsOffset, r: p.otsRadius }),
+                                target: headPos('cyan', p.seatRadius) }), 3, p.handheld) },
 
     // 3 — red over yellow's shoulder, 2.5 s, crawling the same way.
-    { name: 'SC03_ots_red', from: 432, to: 492, focalLength: 55, easing: 'linear',
+    { name: 'SC03_ots_red', from: 432, to: 492, focalLength: p.otsFocal, easing: 'linear',
       hero: 'CHR_red_head',
-      move: alive(moves.truck({ ...otsCrawl('yellow'), target: headPos('red') }), 2.5) },
+      move: alive(moves.truck({ ...otsCrawl('yellow', { offset: p.otsOffset, r: p.otsRadius }),
+                                target: headPos('red', p.seatRadius) }), 2.5, p.handheld) },
 
     // 4 — purple over green's shoulder, long. Halfway through, the gaze slides
     // along the eyeline to cyan without a cut and ends there. ONE continuous
@@ -207,10 +251,10 @@ export default defineScene({
       const whole = alive(
         retarget(
           moves.truck(otsCrawl('green', { offset: -13, crawl: 2, r: 2.13, y: 1.5 })),
-          { targets: [headPos('purple'), headPos('purple'),
-                      headPos('cyan'), headPos('cyan')] },
+          { targets: [headPos('purple', p.seatRadius), headPos('purple', p.seatRadius),
+                      headPos('cyan', p.seatRadius), headPos('cyan', p.seatRadius)] },
         ),
-        9.5, { sway: 0.016, driftAmp: 0.01, breathe: 0.009, tremor: 0.0025 },
+        9.5, p.handheld, { sway: 0.016, driftAmp: 0.01, breathe: 0.009, tremor: 0.0025 },
       );
       return [
         { name: 'SC04a_ots_purple', from: 492, to: 568, focalLength: 40,

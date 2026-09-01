@@ -9,6 +9,7 @@ import { defineScene } from '../../lib/scene.js';
 import { moves, handheld, reframe } from '../../lib/cameraMoves.js';
 
 const SEAT_R = 1.15; // chairs just outside the table top (radius 0.7)
+const TABLE_R = 0.7;
 
 export default defineScene({
   id: 'demo',
@@ -35,9 +36,21 @@ export default defineScene({
     ['CHR_red_torso', 'CHR_red_*'],
   ],
 
-  build: ({ ctx, geo }) => {
+  // The smallest honest parameter block: one that changes the room, one that
+  // changes the lens, one that changes the operator. Every scene in this repo
+  // declares its knobs the same way — see docs/parameters.md.
+  params: {
+    tableRadius: { value: TABLE_R, min: 0.45, max: 1.1, step: 0.02, unit: 'm',
+      note: 'the wide shot\'s hero — widen it and the framing margin tightens' },
+    wideRadius: { value: 4.4, min: 3, max: 6, step: 0.1, unit: 'm' },
+    otsFocal: { value: 58, min: 35, max: 85, step: 1, unit: 'mm', label: 'OTS lens' },
+    handheld: { value: 1, min: 0, max: 3, step: 0.05, unit: '×',
+      note: 'scales the operator on the over-the-shoulder push-in; 0 is locked off' },
+  },
+
+  build: ({ ctx, geo, p }) => {
     ctx.part('ENV_floor', geo.disc({ radius: 6 }), 'grey', ctx.groups.ENV);
-    ctx.part('PRP_table', geo.table({ radius: 0.7, height: 0.72 }), 'wood', ctx.groups.PRP);
+    ctx.part('PRP_table', geo.table({ radius: p.tableRadius, height: 0.72 }), 'wood', ctx.groups.PRP);
 
     // One seated character: a rig pivot placed on the seat circle, facing the
     // table. The head is a separate part so it can be a framing hero.
@@ -61,7 +74,7 @@ export default defineScene({
     seat('red', Math.PI);    // across the table, facing +z
   },
 
-  shots: [
+  shots: (p) => [
     // SC01: wide turntable around the table. Hero is the table — in a wide this
     // close, the nearest character is *supposed* to graze the frame edge.
     {
@@ -74,7 +87,8 @@ export default defineScene({
       // reframe adds `center` to BOTH position and target, so the move's own
       // target is zeroed — otherwise turntable's default [0,1,0] leaks in.
       move: reframe(
-        moves.turntable({ radius: 4.4, pushIn: 0.95, arc: Math.PI * 1.2, target: [0, 0, 0] }),
+        moves.turntable({ radius: p.wideRadius, pushIn: 0.95, arc: Math.PI * 1.2,
+                          target: [0, 0, 0] }),
         { center: [0, 0.72, 0] },
       ),
     },
@@ -87,14 +101,17 @@ export default defineScene({
     // (red's head was perfectly in frame, just invisible) never could.
     {
       name: 'SC02_ots', from: 120, to: 180,
-      focalLength: 58, easing: 'easeOutCubic',
+      focalLength: p.otsFocal, easing: 'easeOutCubic',
       hero: 'CHR_red_head',
       move: handheld(
         reframe(
           moves.pushIn({ from: 2.6, to: 1.9, height: 0.25, target: [-0.5, 0.1, -1.3] }),
           { center: [0.5, 1.05, 0.2] },
         ),
-        { posAmp: 0.012, freq: 2.0 },
+        // rotAmp restates handheld()'s own default of 1 degree, so that the
+        // knob scales the roll too instead of leaving it fixed while the
+        // translation goes to zero.
+        { posAmp: 0.012 * p.handheld, rotAmp: (Math.PI / 180) * p.handheld, freq: 2.0 },
       ),
     },
   ],

@@ -34,7 +34,7 @@ end and gated by the audits. Click to play.
 |---|---|---|
 | ▶ [tiramisu](media/tiramisu.mp4) | a 9 cm kraft cup, 13 cuts, 30 s | two cutting systems on one prop — horizontal bands for the hook, a vertical halving for the close-up — plus the moka→cup→glass chain, measured by `attachments` |
 | ▶ [orbital](media/orbital.mp4) | three worlds, one camera, no cuts | a dome orbit that ends at ground level, dips through the floor, swaps the world under an opaque surface and rises into the next |
-| ▶ [floors](media/floors.mp4) | three takes, one rising move | a move identical to 0.0e+0 across takes, a hero derived from the integral of the speed profile, and floor slabs whose dark flash is geometry |
+| ▶ [floors](media/floors.mp4) | three takes, one rising move | a move that is bit-identical across the three takes, a hero derived from the integral of the speed profile, and floor slabs whose dark flash is geometry |
 | ▶ [canspot](media/canspot.mp4) | a soda can, 13 cuts | CSG slices, clone choreography emerging from inside the hero, object animation as a pure function of the frame |
 | ▶ [roundtable](media/roundtable.mp4) | six characters, four cuts | identity colour as a cast list — the gaze hands off face to face, three over-the-shoulder cuts, real handheld |
 
@@ -53,10 +53,27 @@ free orbit, the camera's whole trajectory drawn as a line coloured per shot
 with a marker at every cut, the shot camera as a moving frustum, and green
 boxes on whatever the current shot declared as its `hero`. Toggle to
 "shot camera" to see the exact render, back to "free orbit" to understand
-it. It is READ-ONLY by design: the audits stay the authority, the inspector
-explains their findings. It reuses `def.make()`, `def.pose()` and
-`applyFrame` — the same pure functions Remotion renders, so there is no
-second implementation to drift.
+it. It reuses `def.make()`, `def.pose()` and `applyFrame` — the same pure
+functions Remotion renders, so there is no second implementation to drift.
+
+The right-hand panel holds the knobs each scene **declares** — the dome's
+apex, the speed at the midpoint of a rise, how far the clones fan out. Turning
+one rebuilds the scene through the same `def.make()` the renderer calls and
+redraws the camera path, so what you are looking at is always a scene that
+could be rendered as it stands. Then "copy render command" gives you the audit
+**and** the render, joined by `&&`, carrying the values you found:
+
+```bash
+pnpm exec node lib/auditScenes.mjs src/scenes/orbital.js --params='{"apex":68}' \
+  && pnpm exec remotion render orbital out/orbital.mp4 --props='{"params":{"apex":68}}'
+```
+
+The audit rides along on purpose: if tuned values could reach a render without
+passing back through the gate, every check in this repo would only ever have
+run against the defaults. The camera itself stays read-only — nothing here can
+drag a camera into a pose, because the moment a camera is placed by eye instead
+of by a move, the pipeline has lost what it is for. See
+[docs/parameters.md](docs/parameters.md).
 
 `pnpm render` refuses to start if any audit fails. That is the point: a
 failed shot costs milliseconds to find, not a render measured in minutes.
@@ -70,6 +87,7 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │   ├── geometry.js          the SHAPES:   every shape, no exceptions
 │   ├── shots.js             the TIMELINE: frame -> shot -> u -> camera
 │   ├── scene.js             the DEFINITION: defineScene — plain JS, Node loads it
+│   ├── params.js            the KNOBS:      declared, ranged, resolved once
 │   ├── remotion.jsx         the COMPONENT:  sceneComposition -> <Composition>
 │   ├── film.js              the EDIT:       defineFilm — plain JS, Node loads it
 │   ├── film.jsx             the EDIT's COMPONENT: filmComposition (live/stitch)
@@ -165,21 +183,31 @@ export default defineScene({
   fps: 24, height: 720, aspect: 21 / 9, subjectSize: 2.5,
   identity: { grey: '#9a9a9a', wood: '#8a6136', green: '#27ae60' },
   ignore: [['PRP_chair_*', 'CHR_*']],
-  build: ({ ctx, geo }) => {
-    ctx.part('ENV_floor', geo.disc({ radius: 6 }), 'grey', ctx.groups.ENV);
-    ctx.part('PRP_table', geo.table({ radius: 0.7 }), 'wood');
+
+  // The knobs this scene opens, with the range it is still itself inside.
+  // They reach build/animate/shots as `p`, resolved once at build time.
+  params: {
+    tableRadius: { value: 0.7, min: 0.45, max: 1.1, step: 0.02, unit: 'm' },
+    orbit: { value: 4, min: 2.5, max: 6, step: 0.1, unit: 'm' },
   },
-  shots: [
+
+  build: ({ ctx, geo, p }) => {
+    ctx.part('ENV_floor', geo.disc({ radius: 6 }), 'grey', ctx.groups.ENV);
+    ctx.part('PRP_table', geo.table({ radius: p.tableRadius }), 'wood');
+  },
+  shots: (p) => [
     { name: 'SC01', from: 0, to: 240, focalLength: 28, easing: 'easeInOutSine',
       hero: 'PRP_table',
-      move: moves.turntable({ radius: 4, pushIn: 0.95, target: [0, 0, 0] }) },
+      move: moves.turntable({ radius: p.orbit, pushIn: 0.95, target: [0, 0, 0] }) },
   ],
 });
 ```
 
 Register it in `src/Root.jsx`, and it is auditable (`pnpm audit:scenes`), scrubbable
-(`pnpm studio`) and renderable (`remotion render myscene out/myscene.mp4`)
-with nothing restated anywhere.
+(`pnpm studio`), tunable (`pnpm inspect`) and renderable
+(`remotion render myscene out/myscene.mp4`) with nothing restated anywhere.
+`params` is optional — a scene with no knobs keeps `build: ({ ctx, geo })` and
+a plain `shots` array, exactly as before.
 
 ## The roundtable scene as a worked case study
 
@@ -231,6 +259,12 @@ them:
   If you write a custom stage, mount the scene, never the groups.
 - `Config.setChromiumOpenGlRenderer('angle')` is set in `remotion.config.ts`;
   without it some machines render black.
+- Parameters are verified through the whole chain: two `remotion still` renders
+  of the same frame, one with `--props`, differ; an out-of-range or unknown key
+  fails the render with the declared range named, not silently clamped. Watch
+  which frame you compare — the first pair I rendered were byte-identical
+  because frame 320 is exactly where the tiramisu's sweep passes through zero,
+  so neither knob could show.
 - Films are verified in **both modes**: `pnpm render:film` (live — two
   `<ThreeCanvas>` scenes through a real TransitionSeries dissolve) and
   `pnpm render:film:stitch` (scenes pre-rendered to `public/`, stitched via

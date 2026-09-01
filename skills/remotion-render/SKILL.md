@@ -57,19 +57,44 @@ export default defineScene({
   identity: { grey: '#9a9a9a', wood: '#8a6136' },
   ignore: [['PRP_chair_*', 'CHR_*']],
 
-  build: ({ ctx, geo }) => {
-    ctx.part('ENV_floor', geo.disc({ radius: 8 }), 'grey', ctx.groups.ENV);
-    ctx.part('PRP_table', geo.table({ radius: .9 }), 'wood', ctx.groups.PRP);
+  // Optional: the knobs this scene opens, each with the range it is still
+  // itself inside. They reach build/animate/shots as `p`, resolved once at
+  // build time, so the scene stays a pure function of (params, frame).
+  params: {
+    tableRadius: { value: .9, min: .5, max: 1.4, step: .02, unit: 'm' },
+    orbit: { value: 5, min: 3, max: 7, step: .1, unit: 'm' },
   },
 
-  shots: [
+  build: ({ ctx, geo, p }) => {
+    ctx.part('ENV_floor', geo.disc({ radius: 8 }), 'grey', ctx.groups.ENV);
+    ctx.part('PRP_table', geo.table({ radius: p.tableRadius }), 'wood', ctx.groups.PRP);
+  },
+
+  shots: (p) => [
     { name: 'SC01_wide', from: 0, to: 450, focalLength: 28, hero: 'PRP_table',
       easing: 'easeInOutSine',
-      move: reframe(moves.turntable({ radius: 5, pushIn: .95, target: [0, 0, 0] }),
+      move: reframe(moves.turntable({ radius: p.orbit, pushIn: .95, target: [0, 0, 0] }),
                     { center: [0, .7, 0] }) },
   ],
 });
 ```
+
+Parameters are optional; without them `build: ({ ctx, geo })` and a plain
+`shots` array work exactly as before. With them, `pnpm inspect` generates a
+control per knob from the declaration and hands you a command that runs the
+gate on the tuned values *and then* renders:
+
+```bash
+node lib/auditScenes.mjs src/scenes/roundtable.js --params='{"orbit":6.2}' \
+  && remotion render roundtable out/roundtable.mp4 --props='{"params":{"orbit":6.2}}'
+```
+
+Both ends refuse an unknown key or an out-of-range value rather than clamping,
+and the duration may not vary — `durationInFrames` is read before props exist,
+so a knob that shortened the shot list would render a silent freeze past the
+end of the move. Never put a knob on a number a brief fixed, or on one that is
+derived: in `floors` the hero's height is the integral of the speed profile at
+its midpoint, so it is recomputed, never stored.
 
 ```jsx
 // src/Root.tsx
@@ -100,6 +125,10 @@ component is separate.
 
 2. **Define each scene with `defineScene()`** from `lib/scene.js`. `build()`
    populates the standard groups; `shots` is the timeline. Both are plain data.
+   If numbers in the scene are still open questions, declare them in `params`
+   (see `references/parameters.md`) rather than editing and re-rendering to
+   find them — but never put a knob on a number a brief fixed, or on one that
+   is derived from another.
 
 3. **Compose scenes into a film with `defineFilm()` from `lib/film.js`**
    (plain JS — the gate audits the real film file) and bind the component with
@@ -192,7 +221,11 @@ in any worker.
 - `references/remotion-pipeline.md` — project layout, determinism rules and what
   each prevents, the audit gate, render commands, output settings for a motion
   reference, and the failure modes. Has a table of contents.
+- `references/parameters.md` — the knobs a scene declares: how to declare them,
+  how the inspector turns them, how the gate stays in front of a tuned render,
+  and which numbers should never become a slider.
 - `lib/scene.js` — `defineScene()`. Plain JS: the audit gate loads it in Node.
+- `lib/params.js` — the declaration: ranges, resolution, the paste-back block.
 - `lib/remotion.jsx` — `sceneComponent()`, `sceneComposition()`, `<PrevizStage>`.
 - `lib/film.jsx` — `defineFilm()`, stitch/live modes, transition arithmetic,
   `film.timeline`, cross-scene checks.

@@ -151,7 +151,7 @@ const DYNAMIC = [
   ...Array.from({ length: 12 }, (_, i) => `PRP_macro_${i}`),
 ];
 
-function animate({ ctx, frame }) {
+function animate({ ctx, frame, p }) {
   const get = ctx.get;
   for (const name of DYNAMIC) {
     const o = get(name);
@@ -179,7 +179,7 @@ function animate({ ctx, frame }) {
     // (30-60), freeze, split (66-96), snap back (96-108), one sharp turn.
     if (f < 26) show('PRP_ball', [0, lerp(1.0, 0.012, f / 26), 0]);
     const rise = ramp(f, 26, 30, easings.easeOutCubic);
-    const canY = lerp(0.004, HOVER, rise);
+    const canY = lerp(0.004, p.hover, rise);
     const split = ramp(f, 66, 30) - ramp(f, 96, 12, easings.easeInOutCubic);
     const splitting = f >= 63 && f < 108;
     if (f >= 26 && !splitting) {
@@ -210,17 +210,17 @@ function animate({ ctx, frame }) {
   }
 
   if (name === 'spiral') {
-    show('PRP_can', [0, HOVER, 0]);
+    show('PRP_can', [0, p.hover, 0]);
     for (let i = 0; i < 8; i++) {
       const [x, , z] = polarXZ(i * 45 + 20, 0.07 + (i % 3) * 0.022);
       show(`PRP_berry_${i}`, [x, 0.02 + ((f + i * 9) / 75) * 0.3, z]);
     }
   }
 
-  if (name === 'travel') show('PRP_can', [0, HOVER, 0]);
+  if (name === 'travel') show('PRP_can', [0, p.hover, 0]);
 
   if (name === 'fan') {
-    const can = show('PRP_can', [0, HOVER, 0]);
+    const can = show('PRP_can', [0, p.hover, 0]);
     can.rotation.y = rad(0.25) * f;
     CLONES.forEach((c, i) => {
       // ease IN-out: easeOutCubic's first visible frame was already 13% of
@@ -234,8 +234,8 @@ function animate({ ctx, frame }) {
       // silhouette along its own ray — clones come OUT of the can, they
       // don't spawn beside it. Radial paths never cross each other; the
       // overlap with the main can during emergence is declared in `ignore`.
-      const [tx, , tz] = polarXZ(FAN_ANGLES[i], FAN_R);
-      show(`PRP_clone_${c}`, [tx * k, HOVER, tz * k]);
+      const [tx, , tz] = polarXZ(FAN_ANGLES[i], p.fanRadius);
+      show(`PRP_clone_${c}`, [tx * k, p.hover, tz * k]);
     });
   }
 
@@ -265,11 +265,11 @@ function animate({ ctx, frame }) {
   if (name === 'overhead') {
     show('ENV_grid');
     show('PRP_glass', [0.09, 0, 0]);
-    show('PRP_can', [0, HOVER, 0]).rotation.y = rad(0.4) * f;
+    show('PRP_can', [0, p.hover, 0]).rotation.y = rad(0.4) * f;
   }
 
   if (name === 'balls') {
-    show('PRP_can', [0, HOVER, 0]);
+    show('PRP_can', [0, p.hover, 0]);
     for (let i = 0; i < 8; i++) {
       const [x, , z] = polarXZ(i * 44 + 10, 0.12 + (i % 4) * 0.045);
       const h = 0.08 + ((i * 37) % 5) * 0.05;
@@ -279,10 +279,10 @@ function animate({ ctx, frame }) {
   }
 
   if (name === 'ring') {
-    show('PRP_can', [0, HOVER, 0]);
+    show('PRP_can', [0, p.hover, 0]);
     RING_ANGLES.forEach((a, i) => {
       const down = ramp(f, i * 6, 24, easings.easeOutCubic);
-      const [x, , z] = polarXZ(a, RING_R);
+      const [x, , z] = polarXZ(a, p.ringRadius);
       show(`PRP_clone_${CLONES[i]}`, [x, lerp(0.6, 0.06, down), z]);
     });
   }
@@ -307,7 +307,7 @@ function animate({ ctx, frame }) {
       if (bloom <= 0) return;
       // Born inside the rising can, blooming out of it radially — same
       // emergence contract as the fan cut.
-      const [tx, , tz] = polarXZ(FAN_ANGLES[i], 0.19);
+      const [tx, , tz] = polarXZ(FAN_ANGLES[i], p.revealRadius);
       show(`PRP_clone_${c}`,
         [tx * bloom, lerp(canY, 0.1 + i * 0.012, bloom), tz * bloom]);
     });
@@ -335,18 +335,32 @@ export default defineScene({
   background: '#2e3742',
   identity,
   ignore,
+  // Staging and lens, not the product: the can is 32 x 122 mm because that is
+  // the can. What is open is where it sits and how the clones move around it.
+  params: {
+    hover: { value: HOVER, min: 0.06, max: 0.22, step: 0.005, unit: 'm',
+      note: 'the can\'s resting base height — the hero in ten of the thirteen cuts' },
+    fanRadius: { value: FAN_R, min: 0.1, max: 0.26, step: 0.005, unit: 'm',
+      note: 'how far the clones fan before they are sucked back in' },
+    revealRadius: { value: 0.19, min: 0.12, max: 0.3, step: 0.005, unit: 'm',
+      note: 'how far they bloom out of the rising can in the reveal' },
+    ringRadius: { value: RING_R, min: 0.12, max: 0.28, step: 0.005, unit: 'm',
+      note: 'the ring the camera flies between; its gap at 135 degrees is the camera\'s own chord, so tightening it is what the clearance audit is watching' },
+    lens: { value: 1, min: 0.7, max: 1.4, step: 0.05, unit: '×',
+      note: 'scales all thirteen focal lengths together, keeping the relationships between the cuts' },
+  },
   build,
   animate,
-  shots: [
+  shots: (p) => [
     // 1 — the hook, in two entries of one camera move: the impact itself is
     // transitional (the ball enters from above, the can erupts from below —
     // both cross the frame edge by design), then from the freeze on, the can
     // must hold frame. Hero includes the slices: during the split the whole
     // can is hidden and the three bands ARE the can.
-    { name: 'SC01a_impact', from: 0, to: 60, focalLength: 32, easing: 'linear',
+    { name: 'SC01a_impact', from: 0, to: 60, focalLength: 32 * p.lens, easing: 'linear',
       hero: [],
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.2, target: [0, 0.18, 0] }), 0, 0.4) },
-    { name: 'SC01b_freeze', from: 60, to: 150, focalLength: 32, easing: 'linear', joins: true,
+    { name: 'SC01b_freeze', from: 60, to: 150, focalLength: 32 * p.lens, easing: 'linear', joins: true,
       hero: ['PRP_can', 'PRP_canS_*'],
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.2, target: [0, 0.18, 0] }), 0.4, 1) },
 
@@ -354,7 +368,7 @@ export default defineScene({
     // phiLow was -2°, which put the camera 7 mm UNDER the water plane at the
     // start — the occlusion audit reported the water blocking 100% of the
     // hero, which is what an underwater camera looking up at a disc sees.
-    { name: 'SC02_spiral', from: 150, to: 225, focalLength: 40, easing: 'linear',
+    { name: 'SC02_spiral', from: 150, to: 225, focalLength: 40 * p.lens, easing: 'linear',
       hero: 'PRP_can',
       move: moves.turntable({ radius: 0.46, pushIn: 0.95, arc: rad(300),
                               phiLow: rad(2), phiHigh: rad(22), target: [0, 0.19, 0] }) },
@@ -362,10 +376,10 @@ export default defineScene({
     // 3 — hold at the lid, then travel down along the can. The lid is the
     // hold's hero; the travel is transitional — a close travel along a
     // product keeps nothing whole in frame, by design.
-    { name: 'SC03a_lid', from: 225, to: 250, focalLength: 60, easing: 'linear',
+    { name: 'SC03a_lid', from: 225, to: 250, focalLength: 60 * p.lens, easing: 'linear',
       hero: 'PRP_can_lid',
       move: hold([0.26, 0.3, 0.15], [0, 0.25, 0]) },
-    { name: 'SC03b_down', from: 250, to: 300, focalLength: 60, easing: 'easeInOutSine',
+    { name: 'SC03b_down', from: 250, to: 300, focalLength: 60 * p.lens, easing: 'easeInOutSine',
       hero: [],
       move: retarget(
         moves.truck({ from: [0.26, 0.3, 0.15], to: [0.26, 0.11, 0.15] }),
@@ -374,30 +388,30 @@ export default defineScene({
     // 4 — wide arc; the five clones fan out from behind, one by one, and are
     // sucked back in. Clones wrapping/crossing the mother can is the shot:
     // declared for occlusion just like it is for collisions.
-    { name: 'SC04_fan', from: 300, to: 420, focalLength: 35, easing: 'linear',
+    { name: 'SC04_fan', from: 300, to: 420, focalLength: 35 * p.lens, easing: 'linear',
       hero: 'PRP_can', occlusion: { ignore: ['PRP_clone_*'] },
       move: moves.orbit360({ radius: 0.7, height: 0.3, startAngle: rad(-60),
                              arc: rad(120), target: [0, 0.14, 0] }) },
 
     // 5 — the can spins slowly in the right half of frame, ice floating up in
     // front of and behind it.
-    { name: 'SC05_close', from: 420, to: 495, focalLength: 50, easing: 'linear',
+    { name: 'SC05_close', from: 420, to: 495, focalLength: 50 * p.lens, easing: 'linear',
       hero: 'PRP_can',
       move: moves.pushIn({ from: 0.52, to: 0.46, height: 0.2, target: [-0.083, 0.209, 0] }) },
 
     // 6 — from inside the translucent glass, looking up; the can hangs almost
     // horizontal, like it's pouring.
-    { name: 'SC06_glass', from: 495, to: 555, focalLength: 24, easing: 'linear',
+    { name: 'SC06_glass', from: 495, to: 555, focalLength: 24 * p.lens, easing: 'linear',
       hero: 'PRP_can',
       move: hold([0, 0.03, 0.01], [0.06, 0.5, 0.02]) },
 
     // 7 — GAP: an editorial placeholder, empty water. Nothing to frame.
-    { name: 'SC07_gap', from: 555, to: 585, focalLength: 35, easing: 'linear',
+    { name: 'SC07_gap', from: 555, to: 585, focalLength: 35 * p.lens, easing: 'linear',
       hero: [],
       move: hold([0, 0.25, 0.6], [0, 0.1, 1.4]) },
 
     // 8 — circling the can and the glass from above, grid on the floor.
-    { name: 'SC08_overhead', from: 585, to: 645, focalLength: 32, easing: 'linear',
+    { name: 'SC08_overhead', from: 585, to: 645, focalLength: 32 * p.lens, easing: 'linear',
       hero: ['PRP_can', 'PRP_glass'],
       // phi tuned against the audit: at 55° the can's top left the frame
       // mid-arc while the glass grazed the bottom — a steeper look-down
@@ -406,7 +420,7 @@ export default defineScene({
                              startAngle: rad(-20), arc: rad(120), target: [0.05, 0.15, 0] }) },
 
     // 9 — balls fall from below upward and freeze like they've hit water.
-    { name: 'SC09_balls', from: 645, to: 705, focalLength: 40, easing: 'linear',
+    { name: 'SC09_balls', from: 645, to: 705, focalLength: 40 * p.lens, easing: 'linear',
       hero: 'PRP_can',
       move: moves.truck({ from: [0.42, 0.2, 0.28], to: [0.38, 0.2, 0.32],
                           target: [0, 0.16, 0] }) },
@@ -415,28 +429,28 @@ export default defineScene({
     // The ring leaves its gap at 135°, which is exactly the camera's chord —
     // clearances are checked numerically, not assumed. No framing hero: at
     // the closest pass nothing whole can stay in frame, and that is the shot.
-    { name: 'SC10_ring', from: 705, to: 765, focalLength: 28, easing: 'easeInOutSine',
+    { name: 'SC10_ring', from: 705, to: 765, focalLength: 28 * p.lens, easing: 'easeInOutSine',
       hero: [],
       move: moves.truck({ from: [0.382, 0.05, 0.255], to: [-0.255, 0.05, -0.382],
                           target: [0, 0.12, 0] }) },
 
     // 11 — macro: an endless stream of lemons, limes and ice at different
     // depths. Explicitly no hero — nothing has to stay in frame.
-    { name: 'SC11_macro', from: 765, to: 810, focalLength: 50, easing: 'linear',
+    { name: 'SC11_macro', from: 765, to: 810, focalLength: 50 * p.lens, easing: 'linear',
       hero: [],
       move: moves.truck({ from: [1.5, 0.15, 0.35], to: [1.5, 0.15, 0.33],
                           target: [1.5, 0.15, 0] }) },
 
     // 12 — the reveal: the can lifts and spins, clones bloom one by one, the
     // camera slowly circles.
-    { name: 'SC12_reveal', from: 810, to: 860, focalLength: 40, easing: 'linear',
+    { name: 'SC12_reveal', from: 810, to: 860, focalLength: 40 * p.lens, easing: 'linear',
       hero: 'PRP_can', occlusion: { ignore: ['PRP_clone_*'] },
       move: moves.orbit360({ radius: 0.55, height: 0.22, startAngle: rad(20),
                              arc: rad(70), target: [0, 0.185, 0] }) },
 
     // 13 — packshot: can levitating on the left, berries beside it, the right
     // third empty for the wordmark in post. No text built.
-    { name: 'SC13_pack', from: 860, to: 900, focalLength: 45, easing: 'linear',
+    { name: 'SC13_pack', from: 860, to: 900, focalLength: 45 * p.lens, easing: 'linear',
       hero: 'PRP_can',
       move: hold([0.02, 0.21, 0.55], [0.1, 0.21, 0]) },
   ],

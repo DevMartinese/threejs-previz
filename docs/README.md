@@ -13,3 +13,6 @@ reading outside Claude.
 - `geometry-vocabulary.md` — choosing a construction, with a shape → helper table.
 - `remotion-pipeline.md` — project layout, render-time determinism, the audit
   gate, films, render commands, failure modes.
+- `parameters.md` — the knobs a scene declares: how to declare them, how the
+  inspector turns them, how the gate stays in front of a tuned render, and
+  which numbers should never become a slider.

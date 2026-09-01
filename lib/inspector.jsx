@@ -2,10 +2,15 @@
  * inspector.jsx — look at a scene from outside the shot.
  *
  * The audits tell you a shot fails and name the frame and the object; this
- * tells you what that looks like in space. It is READ-ONLY on purpose: the
- * gate stays the authority, the inspector explains its findings. Nothing
- * here can be dragged into a new value, because the moment a camera is
- * placed by eye instead of by a move, the pipeline loses what it is for.
+ * tells you what that looks like in space. The camera itself stays READ-ONLY:
+ * the gate is the authority, and nothing here can drag a camera into a new
+ * pose, because the moment a camera is placed by eye instead of by a move, the
+ * pipeline loses what it is for.
+ *
+ * What you CAN turn are the knobs the scene declared (see params.js). Those go
+ * back through `def.make(params)` — the same build the renderer runs — so a
+ * value found here is a value the gate can check and the scene file can keep.
+ * Turning one rebuilds the scene; it does not nudge the result of one.
  *
  * It reuses `defineScene`'s own `make()`, `applyFrame` and `animate` — the
  * same pure functions Remotion renders — so what you inspect IS what
@@ -36,19 +41,19 @@ const SHOT_HUES = [0.02, 0.13, 0.28, 0.42, 0.52, 0.62, 0.72, 0.82, 0.9, 0.07,
  * Sampled with the scene's own `applyFrame` on a throwaway camera, so the
  * line is the trajectory that will actually be rendered.
  */
-export function buildPath(def) {
+export function buildPath(def, list = def.list) {
   const cam = new PerspectiveCamera(45, def.width / def.height, 0.01, 1e5);
   cam.filmGauge = def.filmGauge ?? 36;
   const pos = [], col = [], cuts = [];
   const c = new Color();
-  def.list.shots.forEach((shot, si) => {
+  list.shots.forEach((shot, si) => {
     c.setHSL(SHOT_HUES[si % SHOT_HUES.length], 0.85, 0.55);
     for (let f = shot.from; f < shot.to; f++) {
-      applyFrame(cam, def.list, f);
+      applyFrame(cam, list, f);
       pos.push(cam.position.x, cam.position.y, cam.position.z);
       col.push(c.r, c.g, c.b);
     }
-    applyFrame(cam, def.list, shot.from);
+    applyFrame(cam, list, shot.from);
     cuts.push({ name: shot.name, frame: shot.from, p: cam.position.clone(), colour: c.clone() });
   });
   const g = new BufferGeometry();
@@ -58,9 +63,11 @@ export function buildPath(def) {
 }
 
 /** Everything the inspector adds on top of the scene, as one group. */
-function Overlay({ def, ctx, shotCam, frame, show }) {
+function Overlay({ def, ctx, list, shotCam, frame, show }) {
   const { scene } = useThree();
-  const path = useMemo(() => buildPath(def), [def]);
+  // Rebuilt with the context: a knob that moves the camera moves this line,
+  // which is the whole point of drawing it.
+  const path = useMemo(() => buildPath(def, list), [def, list]);
 
   const objects = useMemo(() => {
     const made = [];
@@ -88,9 +95,19 @@ function Overlay({ def, ctx, shotCam, frame, show }) {
     return made;
   }, [def, path, shotCam]);
 
+  // Dropped AND disposed: dragging a slider rebuilds this set on every change
+  // event, so leaving the buffers behind is a leak measured in seconds, not in
+  // scene switches.
   useLayoutEffect(() => {
     for (const [, o] of objects) scene.add(o);
-    return () => { for (const [, o] of objects) scene.remove(o); };
+    return () => {
+      for (const [, o] of objects) {
+        scene.remove(o);
+        o.geometry?.dispose();
+        o.material?.dispose();
+        o.dispose?.();
+      }
+    };
   }, [scene, objects]);
 
   useLayoutEffect(() => {
@@ -103,7 +120,7 @@ function Overlay({ def, ctx, shotCam, frame, show }) {
     for (const h of heroRef.current) scene.remove(h);
     heroRef.current = [];
     if (show.heroes === false) return;
-    const shot = def.list.at(frame);
+    const shot = list.at(frame);
     if (!shot || !shot.hero) return;
     const pats = [].concat(shot.hero).map((g) =>
       new RegExp('^' + String(g).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'));
@@ -114,7 +131,7 @@ function Overlay({ def, ctx, shotCam, frame, show }) {
       scene.add(h);
       heroRef.current.push(h);
     });
-  }, [scene, ctx, def, frame, show.heroes]);
+  }, [scene, ctx, def, list, frame, show.heroes]);
 
   useFrame(() => {
     const h = objects.find(([k]) => k === 'frustum');
@@ -129,15 +146,19 @@ function Overlay({ def, ctx, shotCam, frame, show }) {
  * `mode` is 'shot' (the free camera is driven to match the render exactly)
  * or 'free' (orbit; the shot camera becomes a visible frustum).
  */
-export function InspectorStage({ def, frame, mode = 'free', show = {} }) {
+export function InspectorStage({ def, frame, mode = 'free', show = {}, params = null }) {
   const { camera, gl, scene, size } = useThree();
-  const ctx = useMemo(() => def.make(), [def]);
+  // Same call the renderer makes. A knob turn is a rebuild, not a nudge — so
+  // what you are looking at is always a scene that could be rendered as is.
+  const key = JSON.stringify(params ?? {});
+  const ctx = useMemo(() => def.make(params), [def, key]); // eslint-disable-line
+  const list = ctx.list ?? def.list;
 
   // Switching scenes builds a whole new context; without this the old one's
   // buffers stay on the GPU. Measured on tiramisu: 115 geometries and 17
   // materials leaked per switch. Remotion never hits this (one build per
   // worker, then the process ends) — an interactive viewer does, every time
-  // you change the dropdown.
+  // you change the dropdown, and now once per slider event too.
   useEffect(() => () => {
     ctx.scene.traverse((o) => {
       if (o.isMesh) {
@@ -175,10 +196,10 @@ export function InspectorStage({ def, frame, mode = 'free', show = {} }) {
   // the same functions the renderer uses
   useLayoutEffect(() => {
     if (def.pose) def.pose(ctx, frame);
-    else if (def.animate) def.animate({ ctx, frame, fps: def.fps });
-    applyFrame(shotCam, def.list, frame);
+    else if (def.animate) def.animate({ ctx, frame, fps: def.fps, p: ctx.params });
+    applyFrame(shotCam, list, frame);
     shotCam.updateMatrixWorld(true);
-  }, [ctx, def, frame, shotCam]);
+  }, [ctx, def, list, frame, shotCam]);
 
   useFrame(() => {
     if (mode === 'shot') {
@@ -196,17 +217,17 @@ export function InspectorStage({ def, frame, mode = 'free', show = {} }) {
     }
   });
 
-  return <Overlay def={def} ctx={ctx} shotCam={shotCam} frame={frame} show={show} />;
+  return <Overlay def={def} ctx={ctx} list={list} shotCam={shotCam} frame={frame} show={show} />;
 }
 
 /** The report for the frame under the playhead — which shot owns it. */
-export function shotAt(def, frame) {
-  const s = def.list.at(frame);
+export function shotAt(def, frame, list = def.list) {
+  const s = list.at(frame);
   if (!s) return null;
   return {
     name: s.name, from: s.from, to: s.to,
     hero: s.hero ? [].concat(s.hero).join(', ') : '(transitional)',
     focalLength: s.focalLength ?? null,
-    progress: def.list.progress(frame),
+    progress: list.progress(frame),
   };
 }

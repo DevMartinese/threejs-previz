@@ -50,14 +50,19 @@ import { applyFrame } from './shots.js';
  * re-evaluated repeatedly can produce marginally different triangles at the seams.
  */
 export function sceneComponent(def) {
-  function Scene() {
+  function Scene({ params }) {
     const frame = useCurrentFrame();
     const { width, height } = useVideoConfig();
-    const ctx = useMemo(() => def.make(), []);
+    // Parameters are resolved ONCE, with the build — they are fixed for the
+    // whole render, so this stays a per-worker cost and every frame of the job
+    // is built from the same numbers. The key makes a changed set rebuild in
+    // the Studio's live preview instead of leaving a stale scene mounted.
+    const key = JSON.stringify(params ?? {});
+    const ctx = useMemo(() => def.make(params), [key]); // eslint-disable-line
 
     return (
       <ThreeCanvas width={width} height={height}>
-        <PrevizStage ctx={ctx} list={def.list} frame={frame}
+        <PrevizStage ctx={ctx} list={ctx.list ?? def.list} frame={frame}
                      visibility={def.visibility} subjectSize={def.subjectSize}
                      filmGauge={def.filmGauge} pose={def.pose} fps={def.fps} />
       </ThreeCanvas>

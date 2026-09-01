@@ -252,7 +252,7 @@ const DYNAMIC = [
   ...Array.from({ length: 10 }, (_, i) => `PRP_macro_${i}`),
 ];
 
-function animate({ ctx, frame }) {
+function animate({ ctx, frame, p }) {
   const get = ctx.get;
   for (const name of DYNAMIC) {
     const o = get(name);
@@ -305,7 +305,7 @@ function animate({ ctx, frame }) {
     const driftT = Math.max(0, f - 26) / 64;
     CLOUD.forEach((d, i) => {
       const [bx, by, bz] = d.position;
-      const e = 0.06 + boom * 0.99 + driftT * 0.35;
+      const e = (0.06 + boom * 0.99 + driftT * 0.35) * p.cloudSpread;
       const airY = 0.05 + Math.abs(by) * e * 0.8 + driftT * 0.03
         + 0.004 * Math.sin(f * 0.12 + i * 2);
       const o = show(`PRP_cloud_${String(i).padStart(2, '0')}`, [
@@ -317,7 +317,7 @@ function animate({ ctx, frame }) {
     const split = ramp(f, 40, 16) - ramp(f, 62, 8, easings.easeInOutCubic);
     const splitting = f >= 38 && f < 70;
     const turn = ramp(f, 72, 16, easings.easeInOutCubic);
-    placeCup(lerp(0.004, HOVER, rise), {
+    placeCup(lerp(0.004, p.hover, rise), {
       split, mode: splitting ? 'bands' : 'whole',
       rotY: Math.PI * 2 * turn, rotZ: rad(12) * Math.sin(Math.PI * turn) });
     if (f >= 20) {
@@ -341,7 +341,7 @@ function animate({ ctx, frame }) {
   }
 
   if (name === 'spiral') {
-    placeCup(HOVER);
+    placeCup(p.hover);
     for (let i = 0; i < 5; i++) {
       const [x, , z] = polarXZ(i * 72 + 15, 0.062 + (i % 3) * 0.012);
       show(`PRP_bean_${i}`, [x, 0.015 + ((f + i * 8) / 65) * 0.2, z])
@@ -354,17 +354,17 @@ function animate({ ctx, frame }) {
     }
   }
 
-  if (name === 'travel') placeCup(HOVER);
+  if (name === 'travel') placeCup(p.hover);
 
   if (name === 'fan') {
-    placeCup(HOVER, { rotY: rad(0.2) * f });
+    placeCup(p.hover, { rotY: rad(0.2) * f });
     CLONES.forEach((c, i) => {
       const out = ramp(f, 6 + i * 9, 16, easings.easeInOutCubic);
       const back = ramp(f, 42 + i * 5, 12, easings.easeInOutCubic);
       const k = out * (1 - back);
       if (k <= 0) return;
-      const [tx, , tz] = polarXZ(FAN_ANGLES[i], FAN_R);
-      show(`PRP_clone_${c}`, [tx * k, HOVER, tz * k]);
+      const [tx, , tz] = polarXZ(FAN_ANGLES[i], p.fanRadius);
+      show(`PRP_clone_${c}`, [tx * k, p.hover, tz * k]);
     });
   }
 
@@ -372,9 +372,9 @@ function animate({ ctx, frame }) {
     // vertical system: swap whole -> halves at f8 (coincident), the FRONT
     // half lifts out of frame (8-20), holds, returns (40-50), swap back f52,
     // while the whole assembly sweeps -35 to +35 degrees.
-    const rotY = rad(lerp(-35, 35, f / 60));
+    const rotY = rad(lerp(-p.sweep, p.sweep, f / 60));
     const vertical = f >= 8 && f < 52;
-    const lift = 0.19 * (ramp(f, 8, 12) - ramp(f, 40, 10));
+    const lift = p.lift * (ramp(f, 8, 12) - ramp(f, 40, 10));
     placeCup(0.105, { rotY, mode: vertical ? 'vertical' : 'whole', lift });
     for (let i = 0; i < 3; i++) {
       show(`PRP_masc_${i}`, [-0.07 - (i % 2) * 0.02,
@@ -389,7 +389,7 @@ function animate({ ctx, frame }) {
     // length all derived from anchors — mouth to glass mouth, wherever they
     // are. Fallers freeze their tumble at touchdown.
     show('PRP_glass', [-0.055, 0, 0]);
-    placeCup(0.19, { x: 0.075, rotZ: rad(120) });
+    placeCup(0.19, { x: 0.075, rotZ: rad(p.pourTilt) });
     const mouth = ctx.anchor('PRP_cup', [0, CUP_H, 0]);
     const glassMouth = ctx.anchor('PRP_glass', [0, 0.06, 0]);
     const dx = mouth.x - glassMouth.x, dy = mouth.y - glassMouth.y;
@@ -414,11 +414,11 @@ function animate({ ctx, frame }) {
     show('PRP_glasscream', [0.1, 0, 0]);
     show('PRP_masc_0', [0.1, lerp(0.3, 0.1, ramp(f, 0, 55, fallEase)), 0])
       .rotation.set(rad(f), rad(f * 1.3), 0);
-    placeCup(HOVER, { rotY: rad(0.4) * f });
+    placeCup(p.hover, { rotY: rad(0.4) * f });
   }
 
   if (name === 'arc') {
-    placeCup(HOVER);
+    placeCup(p.hover);
     const mokaPos = [-0.24, 0.25 + 0.004 * Math.sin(f * 0.05), -0.06];
     show('PRP_moka', mokaPos).rotation.set(0, rad(10), rad(-35));
     show('PRP_moka_waist', mokaPos).rotation.set(0, rad(10), rad(-35));
@@ -434,10 +434,10 @@ function animate({ ctx, frame }) {
   }
 
   if (name === 'ring') {
-    placeCup(HOVER);
+    placeCup(p.hover);
     RING_ANGLES.forEach((a, i) => {
       const down = ramp(f, i * 5, 20, easings.easeOutCubic);
-      const [x, , z] = polarXZ(a, RING_R);
+      const [x, , z] = polarXZ(a, p.ringRadius);
       show(`PRP_clone_${i}`, [x, lerp(0.45, 0.04, down), z]);
     });
   }
@@ -476,62 +476,89 @@ export default defineScene({
     { a: 'PRP_drop_0', b: 'PRP_moka', bLocal: SPOUT, tol: 0.03, settle: true },
     { a: 'PRP_drop_7', b: 'PRP_cup', bLocal: [-0.045, 0.07, -0.012], tol: 0.018, settle: true },
   ],
+  // The knobs are the STAGING, never the product.
+  //
+  // The cup is built to a spec in millimetres — 22/22/26 mm wall bands, layers
+  // of 14/8/14/8/13/10, a 7 mm cocoa disc. Those are not opinions to drag a
+  // slider through; a "cup radius" knob would let anyone quietly render
+  // something that is no longer the product the spec describes. What IS open
+  // is how the piece is staged and shot: how high it floats, how far the
+  // clones travel, how far the section turns to camera, how long the lenses
+  // are. Where a scene's numbers come from a brief, that is the line to draw.
+  params: {
+    hover: { value: HOVER, min: 0.04, max: 0.16, step: 0.005, unit: 'm',
+      note: 'how high the cup floats — it is the hero in eight of the eleven cuts, so this moves most of the framing at once' },
+    sweep: { value: 35, min: 10, max: 80, step: 1, unit: 'deg',
+      note: 'the close-up turns from -sweep to +sweep, so the cut section faces camera at the midpoint. This is the frame the Blender comparison is matched on' },
+    lift: { value: 0.19, min: 0.08, max: 0.32, step: 0.01, unit: 'm',
+      note: 'how far the front half rises out of frame to expose the section' },
+    fanRadius: { value: FAN_R, min: 0.1, max: 0.28, step: 0.005, unit: 'm',
+      note: 'how far the five clones fan out before they are sucked back' },
+    ringRadius: { value: RING_R, min: 0.08, max: 0.2, step: 0.005, unit: 'm',
+      note: 'the ring the camera flies between; tighten it and the clearance audit is what stops you' },
+    pourTilt: { value: 120, min: 90, max: 160, step: 1, unit: 'deg',
+      note: 'how far the cup tips over the glass. The ribbon follows the anchors, so it re-aims itself' },
+    cloudSpread: { value: 1, min: 0.4, max: 2, step: 0.05, unit: '×',
+      note: 'how wide the cocoa detonates on impact' },
+    lens: { value: 1, min: 0.7, max: 1.4, step: 0.05, unit: '×',
+      note: 'scales all eleven focal lengths together, so the relationships between the cuts survive' },
+  },
   build,
   animate,
-  shots: [
+  shots: (p) => [
     // 1 — the hook, 45mm: impact transitional, then the cup/bands hold frame.
-    { name: 'SC01a_impact', from: 0, to: 36, focalLength: 45, easing: 'linear',
+    { name: 'SC01a_impact', from: 0, to: 36, focalLength: 45 * p.lens, easing: 'linear',
       hero: [],
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.16, target: [0, 0.125, 0] }), 0, 0.4) },
-    { name: 'SC01b_freeze', from: 36, to: 90, focalLength: 45, easing: 'linear', joins: true,
+    { name: 'SC01b_freeze', from: 36, to: 90, focalLength: 45 * p.lens, easing: 'linear', joins: true,
       hero: ['PRP_cup', 'PRP_cupS_*'],
       occlusion: { ignore: [...FILLINGS, 'PRP_cloud_*'] },
       move: slice(moves.pushIn({ from: 0.5, to: 0.42, height: 0.16, target: [0, 0.125, 0] }), 0.4, 1) },
 
     // 2 — spiral up from the cloud, 50mm.
-    { name: 'SC02_spiral', from: 90, to: 155, focalLength: 50, easing: 'linear',
+    { name: 'SC02_spiral', from: 90, to: 155, focalLength: 50 * p.lens, easing: 'linear',
       hero: 'PRP_cup', occlusion: { ignore: FILLINGS },
       move: moves.turntable({ radius: 0.38, pushIn: 0.95, arc: rad(300),
                               phiLow: rad(3), phiHigh: rad(22), target: [0, 0.125, 0] }) },
 
     // 3 — hold at the cocoa top, then travel down the kraft wall, 50mm.
-    { name: 'SC03a_top', from: 155, to: 180, focalLength: 50, easing: 'linear',
+    { name: 'SC03a_top', from: 155, to: 180, focalLength: 50 * p.lens, easing: 'linear',
       hero: 'PRP_top_cocoa',
       move: hold([0.22, 0.44, 0.14], [0, 0.155, 0]) },
-    { name: 'SC03b_down', from: 180, to: 215, focalLength: 50, easing: 'easeInOutSine',
+    { name: 'SC03b_down', from: 180, to: 215, focalLength: 50 * p.lens, easing: 'easeInOutSine',
       hero: [],
       move: retarget(
         moves.truck({ from: [0.22, 0.44, 0.14], to: [0.17, 0.07, 0.11] }),
         { targets: [[0, 0.155, 0], [0, 0.095, 0]] }) },
 
     // 4 — wide arc, clones fan to ~17 cm and get sucked back, 50mm.
-    { name: 'SC04_fan', from: 215, to: 290, focalLength: 50, easing: 'linear',
+    { name: 'SC04_fan', from: 215, to: 290, focalLength: 50 * p.lens, easing: 'linear',
       hero: 'PRP_cup', occlusion: { ignore: ['PRP_clone_*', ...FILLINGS] },
       move: moves.orbit360({ radius: 0.62, height: 0.24, startAngle: rad(-60),
                              arc: rad(120), target: [0, 0.11, 0] }) },
 
     // 5 — close-up, 50mm: the front half lifts out of frame by design.
-    { name: 'SC05_close', from: 290, to: 350, focalLength: 50, easing: 'linear',
+    { name: 'SC05_close', from: 290, to: 350, focalLength: 50 * p.lens, easing: 'linear',
       hero: ['PRP_cup', 'PRP_cupV_neg'],
       occlusion: { ignore: [...FILLINGS, 'PRP_cupV_pos', 'PRP_masc_*'] },
       move: moves.pushIn({ from: 0.44, to: 0.4, height: 0.15, target: [-0.06, 0.145, 0] }) },
 
     // 6 — the pour from outside, 38mm, camera low and to the side; the whole
     // chain lives in the X-Y plane, so the camera sits out on +Z.
-    { name: 'SC06_pour', from: 350, to: 405, focalLength: 38, easing: 'linear',
+    { name: 'SC06_pour', from: 350, to: 405, focalLength: 38 * p.lens, easing: 'linear',
       hero: ['PRP_cup', 'PRP_glass'],
       occlusion: { ignore: [...FILLINGS, 'PRP_ribbon', 'PRP_ck*', 'PRP_bean_*'] },
       move: moves.truck({ from: [0.12, 0.05, 0.62], to: [0.09, 0.06, 0.65],
                           target: [0.02, 0.12, 0] }) },
 
     // 7 — GAP, 50mm.
-    { name: 'SC07_gap', from: 405, to: 420, focalLength: 50, easing: 'linear',
+    { name: 'SC07_gap', from: 405, to: 420, focalLength: 50 * p.lens, easing: 'linear',
       hero: [],
       move: hold([0, 0.18, 0.5], [0, 0.08, 1.2]) },
 
     // 8 — steep overhead circle: cup + glass (cream inside, cube falling in),
     // grid on the floor, 50mm.
-    { name: 'SC08_overhead', from: 420, to: 480, focalLength: 50, easing: 'linear',
+    { name: 'SC08_overhead', from: 420, to: 480, focalLength: 50 * p.lens, easing: 'linear',
       hero: ['PRP_cup', 'PRP_glass'],
       occlusion: { ignore: [...FILLINGS, 'PRP_glasscream', 'PRP_masc_*'] },
       move: moves.orbit360({ radius: 0.95, height: 0, phi: rad(66),
@@ -539,7 +566,7 @@ export default defineScene({
 
     // 9 — the moka pours: eight droplets frozen spout-to-cup, a cocoa puff at
     // each, 35mm.
-    { name: 'SC09_arc', from: 480, to: 535, focalLength: 35, easing: 'linear',
+    { name: 'SC09_arc', from: 480, to: 535, focalLength: 35 * p.lens, easing: 'linear',
       hero: ['PRP_cup', 'PRP_moka'],
       occlusion: { ignore: [...FILLINGS, 'PRP_drop_*', 'PRP_puff_*', 'PRP_moka_waist'] },
       move: moves.truck({ from: [0.52, 0.22, 0.36], to: [0.48, 0.22, 0.4],
@@ -547,13 +574,13 @@ export default defineScene({
 
     // 10 — the ring at ~24 cm; the camera flies low between the cups on a
     // CURVED path (bezier), touching nothing — clearance is measured, 50mm.
-    { name: 'SC10_ring', from: 535, to: 610, focalLength: 50, easing: 'easeInOutSine',
+    { name: 'SC10_ring', from: 535, to: 610, focalLength: 50 * p.lens, easing: 'easeInOutSine',
       hero: [],
       move: moves.bezier({ from: polarXZ(135, 0.3, 0.032), via: polarXZ(207, 0.08, 0.032),
                            to: polarXZ(279, 0.3, 0.032), target: [0, 0.1, 0] }) },
 
     // 11 — macro, 85mm: the stream set, frame never empty, hero out of shot.
-    { name: 'SC11_macro', from: 610, to: 720, focalLength: 85, easing: 'linear',
+    { name: 'SC11_macro', from: 610, to: 720, focalLength: 85 * p.lens, easing: 'linear',
       hero: [],
       move: moves.truck({ from: [1.5, 0.15, 0.5], to: [1.5, 0.15, 0.47],
                           target: [1.5, 0.15, 0] }) },

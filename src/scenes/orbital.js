@@ -149,19 +149,20 @@ function build({ ctx, geo }) {
  * closing in as it rises) then DIP (the azimuth keeps turning while the
  * camera sinks through the floor and rises back out). The world is swapped
  * at the bottom of the dip, under an opaque floor.
+ *
+ * Every number the move is made of is a declared parameter, so the shape of
+ * the orbit can be found in the inspector rather than by editing, rendering
+ * and looking. `p` reaches here from `ctx.params`, resolved once at build.
  */
 const CYCLES = 3;
-const DOME_AZ = 180, DIP_AZ = 45;
-const DOME_FRAC = 0.875;                 // 210 of each 240-frame cycle
 const DIP_DEPTH = -3.6;
-const START_AZ = -30;
-const cycleAz = DOME_AZ + DIP_AZ;
 
-const domePose = (k, s) => {
+const domePose = (p, k, s) => {
   const { r0, r1, cx, cz, ty } = WORLDS[k];
-  const az = rad(START_AZ + k * cycleAz + DOME_AZ * s);
-  const phi = rad(5 + 73 * Math.sin(Math.PI * s));
-  const r = lerp(r0, r1, smooth(s));
+  const cycleAz = p.domeAzimuth + p.dipAzimuth;
+  const az = rad(p.startAzimuth + k * cycleAz + p.domeAzimuth * s);
+  const phi = rad(5 + (p.apex - 5) * Math.sin(Math.PI * s));
+  const r = lerp(r0 * p.radius, r1 * p.radius, smooth(s));
   return {
     position: [cx + Math.sin(az) * Math.cos(phi) * r, Math.sin(phi) * r,
                cz + Math.cos(az) * Math.cos(phi) * r],
@@ -169,21 +170,23 @@ const domePose = (k, s) => {
   };
 };
 
-const journey = (u) => {
+const journey = (p, u) => {
+  const DOME_FRAC = p.domeFraction;
+  const cycleAz = p.domeAzimuth + p.dipAzimuth;
   const k = Math.min(CYCLES - 1, Math.floor(u * CYCLES));
   const t = u * CYCLES - k;
   if (t < DOME_FRAC) {
-    const { position, target } = domePose(k, t / DOME_FRAC);
+    const { position, target } = domePose(p, k, t / DOME_FRAC);
     return { position, target, fov: 45, roll: 0 };
   }
   // THE DIP: out of this dome's exact end, under the floor, and back out into
   // the next dome's exact start. The last cycle has no next world, so it
   // sinks and stays — the piece ends under the ground it came from.
   const d = (t - DOME_FRAC) / (1 - DOME_FRAC);
-  const E = domePose(k, 1);
+  const E = domePose(p, k, 1);
   const next = (k + 1) % CYCLES;
-  const S = k < CYCLES - 1 ? domePose(next, 0) : null;
-  const az = rad(START_AZ + k * cycleAz + DOME_AZ + DIP_AZ * d);
+  const S = k < CYCLES - 1 ? domePose(p, next, 0) : null;
+  const az = rad(p.startAzimuth + k * cycleAz + p.domeAzimuth + p.dipAzimuth * d);
   const w = WORLDS[k], wn = WORLDS[next];
   const cx = S ? lerp(w.cx, wn.cx, smooth(d)) : w.cx;
   const cz = S ? lerp(w.cz, wn.cz, smooth(d)) : w.cz;
@@ -192,10 +195,10 @@ const journey = (u) => {
   const r = lerp(rE, rS, smooth(d));
   // height: down through the floor and back up — or, on the last cycle, down
   // and gone. A sine arc keeps the two ends at the domes' own ground height.
-  const yE = E.position[1], yS = S ? S.position[1] : DIP_DEPTH;
+  const yE = E.position[1], yS = S ? S.position[1] : p.dipDepth;
   const y = S
-    ? lerp(yE, yS, smooth(d)) + DIP_DEPTH * Math.sin(Math.PI * d) * 1.6
-    : lerp(yE, DIP_DEPTH * 1.6, smooth(d));
+    ? lerp(yE, yS, smooth(d)) + p.dipDepth * Math.sin(Math.PI * d) * 1.6
+    : lerp(yE, p.dipDepth * 1.6, smooth(d));
   const target = S
     ? [lerp(w.cx, wn.cx, smooth(d)), lerp(w.ty, wn.ty, smooth(d)), lerp(w.cz, wn.cz, smooth(d))]
     : [w.cx, w.ty, w.cz];
@@ -205,9 +208,9 @@ const journey = (u) => {
   };
 };
 
-const win = (a, b) => (u) => journey(a + (b - a) * u);
+const win = (p, a, b) => (u) => journey(p, a + (b - a) * u);
 const F = (fr) => Math.round(720 * fr);
-const C = 1 / CYCLES, DF = DOME_FRAC / CYCLES;
+const C = 1 / CYCLES;
 
 /* ---------------------------------------------------------------- animate --
  * One world at a time. The swap happens inside a shot, at the bottom of the
@@ -216,20 +219,20 @@ const C = 1 / CYCLES, DF = DOME_FRAC / CYCLES;
  * makes it pass.
  */
 const KEYS = ['car', 'court', 'drift'];
-function animate({ ctx, frame }) {
+function animate({ ctx, frame, p }) {
   const u = frame / 720;
   const k = Math.min(CYCLES - 1, Math.floor(u * CYCLES));
   const t = u * CYCLES - k;
   // the next world takes over halfway through the dip, under the floor
-  const active = t < DOME_FRAC + (1 - DOME_FRAC) * 0.5 ? k : Math.min(CYCLES - 1, k + 1);
+  const active = t < p.domeFraction + (1 - p.domeFraction) * 0.5 ? k : Math.min(CYCLES - 1, k + 1);
   KEYS.forEach((key, i) => {
     for (const name of WORLD_PARTS[key]) ctx.get(name).visible = i === active;
   });
   if (KEYS[active] !== 'drift') return;
   // the drift: the car circles the artist AGAINST the camera's turn, yaw
   // offset and oscillating — that is what reads as a drift, not a circle
-  const angle = -frame * 1.7;
-  const [dx, , dz] = polarXZ(angle, DRIFT_R);
+  const angle = -frame * p.driftRate;
+  const [dx, , dz] = polarXZ(angle, p.driftRadius);
   const yaw = rad(angle) + Math.PI / 2 + rad(26 + 9 * Math.sin(frame * 0.13));
   for (const name of DCAR) {
     const o = ctx.get(name);
@@ -247,25 +250,28 @@ const HEROES = [
     occ: ['PRP_dcar_*', 'PRP_beam_*', 'CHR_artist_*'] },
 ];
 
-const shots = [];
-for (let k = 0; k < CYCLES; k++) {
-  const a = k * C, dome = a + DF, end = (k + 1) * C;
-  const n = F(end) - F(dome);
-  shots.push(
-    { name: `DOME${k + 1}_${WORLDS[k].key}`, from: F(a), to: F(dome),
-      focalLength: WORLDS[k].focal, easing: 'linear',
-      hero: HEROES[k].hero, occlusion: { ignore: HEROES[k].occ },
-      joins: k > 0, move: win(a, dome) },
-    // Half-open ranges: the last RENDERED frame is to-1, which maps to
-    // progress (n-1)/n. Stretch the window so that frame lands exactly on
-    // the next dome's u=0, or the splice is one frame of trajectory short —
-    // the seam check measured 0.64 m of it on the widest radius change.
-    { name: `DIP${k + 1}`, from: F(dome), to: F(end),
-      focalLength: WORLDS[k].focal, easing: 'linear',
-      hero: [], clearance: 0, joins: true,
-      move: win(dome, dome + (end - dome) * n / (n - 1)) },
-  );
-}
+const shots = (p) => {
+  const out = [];
+  for (let k = 0; k < CYCLES; k++) {
+    const a = k * C, dome = a + p.domeFraction / CYCLES, end = (k + 1) * C;
+    const n = F(end) - F(dome);
+    out.push(
+      { name: `DOME${k + 1}_${WORLDS[k].key}`, from: F(a), to: F(dome),
+        focalLength: WORLDS[k].focal * p.lens, easing: 'linear',
+        hero: HEROES[k].hero, occlusion: { ignore: HEROES[k].occ },
+        joins: k > 0, move: win(p, a, dome) },
+      // Half-open ranges: the last RENDERED frame is to-1, which maps to
+      // progress (n-1)/n. Stretch the window so that frame lands exactly on
+      // the next dome's u=0, or the splice is one frame of trajectory short —
+      // the seam check measured 0.64 m of it on the widest radius change.
+      { name: `DIP${k + 1}`, from: F(dome), to: F(end),
+        focalLength: WORLDS[k].focal * p.lens, easing: 'linear',
+        hero: [], clearance: 0, joins: true,
+        move: win(p, dome, dome + (end - dome) * n / (n - 1)) },
+    );
+  }
+  return out;
+};
 
 export default defineScene({
   id: 'orbital',
@@ -275,6 +281,27 @@ export default defineScene({
   subjectSize: 2.5,
   identity,
   ignore,
+  params: {
+    domeAzimuth: { value: 180, min: 90, max: 300, step: 5, unit: 'deg',
+      note: 'how far round each world the orbit travels before the dip' },
+    apex: { value: 78, min: 20, max: 86, step: 1, unit: 'deg',
+      note: 'elevation at the top of the dome; 86 is nearly overhead, where the lookAt starts to roll' },
+    radius: { value: 1, min: 0.6, max: 1.6, step: 0.02, unit: '×',
+      note: 'scales every dome radius at once — the whole piece nearer or further out' },
+    lens: { value: 1, min: 0.7, max: 1.5, step: 0.05, unit: '×',
+      note: 'scales the per-world focal lengths together; the court stays the widest of the three' },
+    domeFraction: { value: 0.875, min: 0.7, max: 0.95, step: 0.005,
+      note: 'share of each cycle spent on the dome — the rest is the dip, so lower means a slower, longer plunge' },
+    dipAzimuth: { value: 45, min: 0, max: 120, step: 5, unit: 'deg',
+      note: 'how much the camera keeps turning while it is under the floor' },
+    dipDepth: { value: DIP_DEPTH, min: -8, max: -1.5, step: 0.1, unit: 'm',
+      note: 'how far under the floor it sinks; the swap happens at the bottom, so too shallow and you see it' },
+    startAzimuth: { value: -30, min: -180, max: 180, step: 5, unit: 'deg',
+      note: 'which side of the first world the piece opens on' },
+    driftRate: { value: 1.7, min: 0.5, max: 4, step: 0.1, unit: 'deg/f',
+      note: 'how fast the night car circles the artist' },
+    driftRadius: { value: DRIFT_R, min: 2, max: 6, step: 0.1, unit: 'm' },
+  },
   build,
   animate,
   shots,
