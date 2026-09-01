@@ -37,6 +37,42 @@ export function renderCommand(def, file, values) {
     + `  && pnpm exec remotion render ${def.id} ${out} --props='${props}'`;
 }
 
+/**
+ * The same thing for a FILM: the edit, rendered with whatever its scenes are
+ * currently tuned to. `tuned` is `{sceneId: diff}` for the scenes of this film
+ * that differ from their defaults.
+ *
+ * The two modes need genuinely different commands, and getting that wrong is
+ * silent rather than loud, so it is generated rather than remembered:
+ *
+ *   live    one render; the scenes are mounted and the parameters go straight
+ *           to the film composition, which routes them per scene.
+ *   stitch  the film plays FILES. Parameters cannot reach frames that already
+ *           exist, so each tuned scene is re-rendered into public/ FIRST and
+ *           the film is stitched from those. Scenes nobody touched are
+ *           re-rendered too — the command has to be able to run in a clean
+ *           checkout, where public/ is empty.
+ */
+export function filmCommand(film, file, exportName, tuned) {
+  const target = exportName ? `${file} --export=${exportName}` : file;
+  const some = Object.keys(tuned).length > 0;
+  const audit = some
+    ? `pnpm exec node lib/auditScenes.mjs ${target} --params='${j(tuned)}'`
+    : `pnpm exec node lib/auditScenes.mjs ${target}`;
+
+  if (film.mode === 'live') {
+    const props = some ? ` --props='${j({ params: tuned })}'` : '';
+    return `${audit} \\\n  && pnpm exec remotion render ${film.id} out/${film.id}.mp4${props}`;
+  }
+  const steps = film.scenes.map((s) => {
+    const over = tuned[s.id];
+    const props = over ? ` --props='${j({ params: over })}'` : '';
+    return `  && pnpm exec remotion render ${s.id} public/${s.id}.mp4${props}`;
+  });
+  steps.push(`  && pnpm exec remotion render ${film.id} out/${film.id}.mp4`);
+  return [audit, ...steps].join(' \\\n');
+}
+
 async function copy(text, done) {
   try {
     await navigator.clipboard.writeText(text);
@@ -89,8 +125,32 @@ function Knob({ d, value, onChange }) {
   );
 }
 
-export function ParamPanel({ def, file, values, onChange, onReset, error }) {
+/**
+ * Write the values into the scene file and run the gate on what was written.
+ * The panel shows the gate's own report — not a summary of it — because the
+ * whole reason to save through here rather than paste is that the saved value
+ * is immediately a value somebody has checked.
+ */
+async function save(file, block, set) {
+  set({ busy: true, text: 'saving…' });
+  try {
+    const r = await fetch('/__params', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file, block }),
+    });
+    const body = await r.json();
+    if (!r.ok) return set({ busy: false, bad: true, text: body.error ?? `HTTP ${r.status}` });
+    set({ busy: false, bad: !body.audit.ok, saved: true,
+          text: `saved to ${body.file}\n\n${body.audit.text}` });
+  } catch (err) {
+    set({ busy: false, bad: true, text: `could not reach the dev server: ${err.message}` });
+  }
+}
+
+export function ParamPanel({ def, file, values, onChange, onReset, error, films = [] }) {
   const [note, setNote] = useState('');
+  const [saveState, setSaveState] = useState(null);
   const knobs = Object.values(def.params ?? {});
   const diff = knobs.length ? paramDiff(def.params, values) : {};
   const dirty = Object.keys(diff).length;
@@ -123,6 +183,10 @@ export function ParamPanel({ def, file, values, onChange, onReset, error }) {
 
       {knobs.length > 0 && (
         <div className="panel-foot">
+          <button className={dirty ? 'on' : ''} disabled={saveState?.busy}
+                  onClick={() => save(file, paramSource(def.params, values), setSaveState)}>
+            save to scene file
+          </button>
           <button onClick={() => copy(renderCommand(def, file, values), flash)}>
             copy render command
           </button>
@@ -130,12 +194,45 @@ export function ParamPanel({ def, file, values, onChange, onReset, error }) {
             copy params block
           </button>
           <span className="dim">{note}</span>
-          {dirty > 0 && (
+          {saveState && (
+            <pre className={saveState.bad ? 'error' : 'report'}>{saveState.text}</pre>
+          )}
+          {dirty > 0 && !saveState && (
             <p className="dim note">
-              The command runs the audit on these values first, then renders. To keep
-              them, paste the params block over the one in <code>{file}</code>.
+              <b>Save</b> writes these into <code>{file}</code> and runs the gate on
+              what it wrote — that is what makes the change reviewable, versioned,
+              and visible to anyone (or anything) that reads the repo afterwards.
+              The command is for a one-off variant instead.
             </p>
           )}
+        </div>
+      )}
+
+      {/* The films this scene belongs to. Values are held per scene and survive
+          the dropdown, so you can tune three scenes and then take the whole
+          edit out in one command. */}
+      {films.length > 0 && (
+        <div className="panel-foot">
+          <b>films</b>
+          {films.map(({ film, file: ffile, exportName, tuned }) => {
+            const n = Object.keys(tuned).length;
+            return (
+              <div key={film.id + (exportName ?? '')} className="film-row">
+                <button onClick={() => copy(filmCommand(film, ffile, exportName, tuned), flash)}>
+                  copy film · {film.id}
+                </button>
+                <span className="dim">
+                  {film.mode} · {film.scenes.length} scenes · {film.durationInFrames}f
+                  {n ? ` · ${n} tuned` : ' · at defaults'}
+                </span>
+              </div>
+            );
+          })}
+          <p className="dim note">
+            Renders the edit with every scene at the values held here. A stitched
+            film renders its scenes into <code>public/</code> first — parameters
+            cannot reach frames that already exist.
+          </p>
         </div>
       )}
     </aside>

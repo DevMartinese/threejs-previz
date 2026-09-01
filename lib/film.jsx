@@ -48,11 +48,11 @@ export function filmComponent(def, {
   }
 
   const liveComponents = new Map();
-  function sceneBody(scene) {
+  function sceneBody(scene, params) {
     if (def.mode === 'live') {
       if (!liveComponents.has(scene.id)) liveComponents.set(scene.id, sceneComponent(scene));
       const C = liveComponents.get(scene.id);
-      return <C />;
+      return <C params={params} />;
     }
     return (
       <OffthreadVideo
@@ -62,19 +62,38 @@ export function filmComponent(def, {
     );
   }
 
-  function renderSeries() {
+  /**
+   * A stitched film plays FILES. The frames already exist, so a parameter
+   * handed to this composition could not reach the geometry that produced
+   * them — it would be accepted, ignored, and the film would come out at the
+   * defaults while the command said otherwise. That is precisely the class of
+   * silent wrongness this module exists to prevent, so it throws and names
+   * the fix: pass the parameters to the per-scene renders that fill public/,
+   * then stitch.
+   */
+  function assertParamsUsable(params) {
+    const given = Object.keys(params ?? {});
+    if (!given.length || def.mode === 'live') return;
+    throw new Error(
+      `film "${def.id}" is in 'stitch' mode: it renders the files in public/, so `
+      + `parameters for ${given.join(', ')} cannot reach it. Render those scenes `
+      + `with the parameters first — e.g. remotion render ${given[0]} `
+      + `public/${given[0]}.mp4 --props='{"params":{…}}' — then render the film.`);
+  }
+
+  function renderSeries(params) {
     return (
       <Series>
         {def.scenes.map((s) => (
           <Series.Sequence key={s.id} durationInFrames={s.list.duration} name={s.id}>
-            {sceneBody(s)}
+            {sceneBody(s, params?.[s.id])}
           </Series.Sequence>
         ))}
       </Series>
     );
   }
 
-  function renderWithTransitions() {
+  function renderWithTransitions(params) {
     const out = [];
     def.scenes.forEach((s, i) => {
       out.push(
@@ -82,7 +101,7 @@ export function filmComponent(def, {
         // Transition scenes must stay absolutely positioned. (The opposite of
         // a plain <Sequence> inside a <ThreeCanvas>, which needs it.)
         <TransitionSeries.Sequence key={s.id} durationInFrames={s.list.duration} name={s.id}>
-          {sceneBody(s)}
+          {sceneBody(s, params?.[s.id])}
         </TransitionSeries.Sequence>,
       );
       const t = def.transitions[s.id];
@@ -99,10 +118,14 @@ export function filmComponent(def, {
     return <TransitionSeries>{out}</TransitionSeries>;
   }
 
-  function Component() {
+  function Component({ params }) {
+    assertParamsUsable(params);
+    // Validated against each scene's own declaration before anything mounts,
+    // so a bad key fails at the film exactly as it would at the scene.
+    if (params && Object.keys(params).length) def.resolve(params);
     return (
       <AbsoluteFill style={{ backgroundColor: def.background }}>
-        {hasTransitions ? renderWithTransitions() : renderSeries()}
+        {hasTransitions ? renderWithTransitions(params) : renderSeries(params)}
       </AbsoluteFill>
     );
   }

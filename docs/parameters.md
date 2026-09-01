@@ -85,10 +85,99 @@ pnpm exec node lib/auditScenes.mjs src/scenes/orbital.js --params='{"apex":68}' 
   && pnpm exec remotion render orbital out/orbital.mp4 --props='{"params":{"apex":68}}'
 ```
 
-**copy params block** — the `params:` block for the scene file, with the
-current values as the new defaults. This is the one that makes a change
-permanent, versioned and gated. The render command is for a variant you want to
-look at; the block is for one you want to keep.
+**save to scene file** — writes those values into the scene file's own
+`params:` block and then runs the gate on what it wrote, showing you the
+report. This is the one that makes a change permanent. (**copy params block**
+puts the same text on the clipboard if you would rather paste it yourself.)
+
+---
+
+## The round trip
+
+The workflow this is built for is a conversation, not a session:
+
+1. You ask for a scene. It gets built, audited, rendered.
+2. Something is off. You open `pnpm inspect`, turn the knob, save.
+3. You say *"carry on from what I changed."*
+
+Step 3 only works because step 2 wrote to the file. A value that lives in a
+browser tab is invisible to git, to whoever you hand the project to, and to an
+agent you ask to continue — which can read files and cannot read your tab.
+That is the whole reason the panel writes back instead of only printing a block
+to paste: **the repo is the handoff.**
+
+The same holds in the other direction. Edit a scene file by hand and the
+inspector picks it up: it stores, alongside each scene's tuning, the defaults
+that tuning was based on, and drops any knob whose default has since moved.
+The file wins. You are never quietly handed back the number you just replaced.
+
+What the writeback will NOT do:
+
+- touch anything but the top-level `params: { … }` block — your build, your
+  shots and the comments explaining why a number is what it is are untouched,
+  because a tool that rewrites whole files eventually eats a comment somebody
+  needed;
+- write outside `src/scenes/*.js`;
+- change a *declaration*. It parses the incoming block, re-declares it and
+  compares field by field: ranges, units, labels and notes must survive
+  untouched or nothing is written. (The first version of the generator dropped
+  `label`, which would have silently deleted every custom label in the file.
+  Widen a range by editing the scene, where the change is reviewable.)
+- exist outside the dev server. The plugin is `apply: 'serve'`.
+
+It *will* save values that fail the gate — the file is your working state, and
+a panel that refuses to save is a panel that fights you — but the report comes
+back red and `pnpm render` stays shut until you fix it.
+
+---
+
+## Films
+
+A film is an edit of scenes, so a film's knobs are its scenes' knobs, keyed by
+scene id. Nothing is declared at the film level:
+
+```bash
+pnpm exec node lib/auditScenes.mjs src/film.js \
+    --params='{"opening":{"tilt":80},"roundtable":{"orbitRadius":3.6}}' \
+  && pnpm exec remotion render feature out/feature.mp4 \
+    --props='{"params":{"opening":{"tilt":80},"roundtable":{"orbitRadius":3.6}}}'
+```
+
+The inspector holds tuning **per scene, across the dropdown**, so you can
+settle scene one, move to scene two, come back, and then take the whole edit
+out with **copy film · &lt;id&gt;**. The panel lists every film the current scene
+belongs to and how many of its scenes are tuned.
+
+Three things this had to get right:
+
+**The film's duration cannot move**, and that comes free: `defineScene` already
+refuses a parameter set that changes a scene's length, so every scene keeps its
+frame count and the transition arithmetic stays valid whatever the knobs say.
+
+**The seam check has to measure the tuned values.** A knob that moves a camera
+moves where a scene *ends*, and a dive-through that spliced at the defaults may
+not splice any more. `film.check(params)` rebuilds each scene's shot list from
+the parameters before measuring the boundary poses.
+
+**A stitched film cannot take parameters at all.** It plays the files in
+`public/`; those frames already exist, so a parameter handed to the film
+composition could not reach the geometry that produced them. It would be
+accepted, ignored, and the film would come out at the defaults with the command
+claiming otherwise — the exact class of silent wrongness the film checks exist
+to prevent. So it throws, and the generated stitch command does the right thing
+instead: render each tuned scene into `public/` **first**, then stitch.
+
+```bash
+pnpm exec node lib/auditScenes.mjs src/film.js --export=stitched --params='{…}' \
+  && pnpm exec remotion render opening public/opening.mp4 --props='{"params":{"tilt":80}}' \
+  && pnpm exec remotion render roundtable public/roundtable.mp4 --props='{"params":{…}}' \
+  && pnpm exec remotion render feature-stitch out/feature-stitch.mp4
+```
+
+Auditing a film with parameters audits the **scenes** with them too. The
+film-level checks only look at how scenes join; if a knob put a hero out of
+frame inside one of them, nothing at the film level would ever see it, and
+`--params` on a film would have been a way past the gate.
 
 ---
 

@@ -29,11 +29,16 @@
       .knob-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
       .knob input[type=range] { width: 100%; min-width: 0; }
       .knob-row { padding: 2px 0; }
+      .film-row { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
       .note { margin: 2px 0 0; font-size: 11px; line-height: 1.35; }
       .hot { background: #3f6c8e; color: #fff; }
       .error { margin: 0; padding: 6px 8px; border-radius: 4px; font-size: 11px;
                background: #4a2326; border: 1px solid #7a3a3f; color: #f0c8c8; }
       code { background: #2b2d31; padding: 0 3px; border-radius: 3px; }
+      .report, .error { margin: 0; padding: 6px 8px; border-radius: 4px; font-size: 11px;
+                        white-space: pre-wrap; max-height: 220px; overflow: auto;
+                        font-family: inherit; }
+      .report { background: #23331f; border: 1px solid #3f5f36; color: #cfe6c4; }
       #stage { grid-area: stage; position: relative; overflow: hidden; display: grid;
                place-items: center; background: #101113; }
       canvas { display: block; }

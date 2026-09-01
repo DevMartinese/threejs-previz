@@ -72,8 +72,20 @@ The audit rides along on purpose: if tuned values could reach a render without
 passing back through the gate, every check in this repo would only ever have
 run against the defaults. The camera itself stays read-only — nothing here can
 drag a camera into a pose, because the moment a camera is placed by eye instead
-of by a move, the pipeline has lost what it is for. See
-[docs/parameters.md](docs/parameters.md).
+of by a move, the pipeline has lost what it is for.
+
+**Save writes back to the scene file** and runs the gate on what it wrote. That
+matters more than the convenience: the workflow this is built for is a
+conversation, not a session — you ask for a scene, dislike something, change
+it, and say *"carry on from what I changed."* That last step only works if the
+change is in the repo, because a value in a browser tab is invisible to git, to
+whoever you hand the project to, and to an agent you ask to continue. The repo
+is the handoff. It goes the other way too: edit a scene by hand and the
+inspector drops any knob whose default moved — the file wins.
+
+Tuning is held **per scene across the dropdown**, so you can settle three
+scenes and take the whole edit out in one command; the panel lists every film
+the current scene belongs to. See [docs/parameters.md](docs/parameters.md).
 
 `pnpm render` refuses to start if any audit fails. That is the point: a
 failed shot costs milliseconds to find, not a render measured in minutes.
@@ -102,6 +114,7 @@ failed shot costs milliseconds to find, not a render measured in minutes.
 │       │                    choreography, object animation, 16 audited entries
 │       └── demo.js          the smallest complete scene (2 characters, 2 shots)
 ├── inspector/               the Vite app behind `pnpm inspect`
+│   └── writeback.js         save knob values into the scene file, then audit
 ├── docs/                    the method, written up
 └── skills/                  the same material packaged as Claude skills
 ```
