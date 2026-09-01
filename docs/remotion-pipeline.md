@@ -300,13 +300,26 @@ no extra package, and flattens Three's nested fields onto plain names (`x`,
 `rotateY` in degrees, `opacity`).
 
 **Why a tween library is allowed here at all**, given the no-clocks rule:
-`.seek()` was measured to be independent of call order. Forty-eight frames
-came out identical across sequential, shuffled and reverse seeking, for
-absolute, relative (`'+=5'`), explicit `[from, to]` and implicit-from values
-alike — so Remotion's out-of-order workers get the same frame every time.
-The one condition is the same one that governs geometry: **build the timeline
-once, inside `make()`, and only seek it**. Rebuild it per frame and the
-guarantee is gone.
+`.seek()` was measured to be independent of call order, so Remotion's
+out-of-order workers get the same frame every time. `timeline` is duck-typed
+— anything with `.seek(ms)` qualifies, there is no dependency on a particular
+library — and `npm test` (`test/timeline-determinism.mjs`) is the experiment,
+kept in the repo so the claim stays checkable rather than remembered.
+
+Two conditions, both measured:
+
+**Build the timeline once, inside `make()`, and only seek it.** Rebuild it per
+frame and the guarantee is gone — the same rule that governs geometry.
+
+**Avoid an explicit `[from, to]` that starts at a non-zero offset.** It does
+not restore its own `from` when seeked backwards past its start: sequential
+order shows the object's constructed value, shuffled order shows the tween's
+`from` left over from a later seek — 6 frames of 48 in the test. Pinning the
+start with a keyframe at 0 looks like a fix and is not (it still skews under
+shuffled, as opposed to merely reversed, order). What works is either moving
+the tween to time 0, or using an absolute target, which is safe at any
+offset. Absolute targets, relative `'+='`, implicit-from and even boolean
+tracks like `visible` are all order-independent.
 
 ## 8. Rendering
 

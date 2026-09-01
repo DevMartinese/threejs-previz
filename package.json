@@ -13,14 +13,14 @@
     "render:film:stitch": "npm run audit && remotion render opening public/opening.mp4 && remotion render roundtable public/roundtable.mp4 && remotion render feature-stitch out/feature-stitch.mp4",
     "still": "remotion still roundtable out/still.png --frame=180",
     "frames": "npm run audit && remotion render roundtable out/frames --sequence",
-    "inspect": "vite --config inspector/vite.config.js"
+    "inspect": "vite --config inspector/vite.config.js",
+    "test": "node test/timeline-determinism.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^8.17.10",
     "@remotion/cli": "^4.0.0",
     "@remotion/three": "^4.0.0",
     "@remotion/transitions": "^4.0.519",
-    "animejs": "^4.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remotion": "^4.0.0",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react-swc": "^4.3.3",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "animejs": "^4.5.0"
   }
 }
