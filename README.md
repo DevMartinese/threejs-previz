@@ -56,6 +56,43 @@ every piece above is one command — `pnpm render:scene orbital`,
 those renders downscaled to 1260x540 to keep the repo small; the
 command gives you the full-resolution original.
 
+## Commands
+
+| | |
+|---|---|
+| `pnpm audit:scenes` | the gate: every audit on every scene and film. Nothing renders without it |
+| `pnpm inspect` | the viewer and the knob panel — orbit the scene, tune it, save back to the file |
+| `pnpm studio` | Remotion Studio: scrub the timeline, see exactly what the shot sees |
+| `pnpm render:scene <id>` | audit, then render to `out/<id>.mp4` |
+| `pnpm render:scene <id> out/frames --sequence` | the same, as a PNG sequence |
+| `pnpm still:scene <id> out/f.png --frame=120` | one frame |
+| `pnpm render:film` | the `live` film: every scene mounted, rendered in one pass |
+| `pnpm render:film:stitch` | render the scenes into `public/`, then stitch them |
+
+Anything after the composition id is forwarded to Remotion, so its own flags
+(`--sequence`, `--props`, `--concurrency`, …) work unchanged.
+
+The gate takes flags of its own — it is `node lib/auditScenes.mjs <files…>`
+underneath, which is what you call directly when you want one of these:
+
+| | |
+|---|---|
+| `--params='{"apex":68}'` | audit a parameter variant. On a film, keyed by scene id: `'{"roundtable":{"orbitArc":90}}'` |
+| `--export=stitched` | audit a named export instead of the default one |
+| `--samples=8` | frames sampled per shot (default 6) |
+| `--quiet` · `--json` | only failures · machine-readable |
+
+A render takes the values you found in the inspector:
+
+```bash
+pnpm exec remotion render orbital out/orbital.mp4 --props='{"params":{"apex":68}}'
+```
+
+Both ends refuse an unknown knob or one outside its declared range, rather than
+clamping it — see [docs/parameters.md](docs/parameters.md).
+
+## The inspector
+
 `studio` shows you what the shot sees. `inspect` shows you the shot itself —
 free orbit, the camera's whole trajectory drawn as a line coloured per shot
 with a marker at every cut, the shot camera as a black frustum, and green boxes
