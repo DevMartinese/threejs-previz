@@ -6,7 +6,7 @@
   "description": "Cinematic previz in code: Three.js blocking scenes, a camera-move catalog, measured audits, and deterministic Remotion renders — motion references for generative video models.",
   "scripts": {
     "studio": "remotion studio",
-    "audit": "node lib/auditScenes.mjs src/scenes/*.js src/film.js src/film-orbital.js",
+    "audit": "node lib/auditScenes.mjs src/scenes/*.js src/film.js",
     "render": "npm run audit && remotion render roundtable out/roundtable.mp4",
     "render:demo": "npm run audit && remotion render demo out/demo.mp4",
     "render:film": "npm run audit && remotion render feature out/feature.mp4",
