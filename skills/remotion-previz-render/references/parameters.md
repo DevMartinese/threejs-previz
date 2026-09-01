@@ -63,9 +63,12 @@ wants a different length is a different scene.
 pnpm inspect
 ```
 
-The panel on the right is generated entirely from the declaration — there is no
-list of controls anywhere in the inspector. A scene that declares a knob gets a
-control; a scene that declares none gets a panel that says so.
+The panel on the right is **lil-gui**, generated entirely from the declaration
+— there is no list of controls anywhere in the inspector. A scene that declares
+a knob gets a control (a slider for a number, a checkbox for a boolean, a select
+for an enum), its `unit` goes in the label, its `note` becomes the tooltip, and
+a value that has left its declared default is highlighted. A scene that declares
+none gets a panel that says so.
 
 Turning a knob calls `def.make(params)`, the same build the renderer runs, and
 redraws the camera path from the shot list those values imply. It is a rebuild,

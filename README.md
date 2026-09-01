@@ -64,12 +64,14 @@ boxes on whatever the current shot declared as its `hero`. Toggle to
 it. It reuses `def.make()`, `def.pose()` and `applyFrame` — the same pure
 functions Remotion renders, so there is no second implementation to drift.
 
-The right-hand panel holds the knobs each scene **declares** — the dome's
-apex, the speed at the midpoint of a rise, how far the clones fan out. Turning
-one rebuilds the scene through the same `def.make()` the renderer calls and
-redraws the camera path, so what you are looking at is always a scene that
-could be rendered as it stands. Then "copy render command" gives you the audit
-**and** the render, joined by `&&`, carrying the values you found:
+The right-hand panel is **lil-gui**, generated entirely from the knobs each
+scene **declares** — the dome's apex, the speed at the midpoint of a rise, how
+far the clones fan out. No control is written by hand: a scene that declares a
+knob gets one, and each knob's `note` becomes its tooltip. Turning one rebuilds
+the scene through the same `def.make()` the renderer calls and redraws the
+camera path, so what you are looking at is always a scene that could be
+rendered as it stands. Then "copy render command" gives you the audit **and**
+the render, joined by `&&`, carrying the values you found:
 
 ```bash
 pnpm exec node lib/auditScenes.mjs src/scenes/orbital.js --params='{"apex":68}' \

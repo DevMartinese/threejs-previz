@@ -18,23 +18,28 @@
                        display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 
       #params { grid-area: params; background: #202225; border-left: 1px solid #2e3033;
-                padding: 10px 12px 16px; overflow-y: auto; display: flex;
-                flex-direction: column; gap: 12px; }
-      .panel-head { display: flex; gap: 8px; align-items: baseline;
-                    border-bottom: 1px solid #2e3033; padding-bottom: 8px; }
-      .panel-head button { margin-left: auto; }
-      .panel-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid #2e3033;
-                    display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-      .knob { display: flex; flex-direction: column; gap: 3px; }
-      .knob-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-      .knob input[type=range] { width: 100%; min-width: 0; }
-      .knob-row { padding: 2px 0; }
-      .film-row { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+                padding: 0 0 16px; overflow-y: auto; display: flex;
+                flex-direction: column; gap: 10px; }
+      #params > :not(.gui-host) { margin-left: 10px; margin-right: 10px; }
+      /* lil-gui ships its own styles; these only make it fill the column, sit
+         in the inspector's palette, and mark a controller whose value has left
+         its declared default. Class names carry lil-gui 0.21's `lil-` prefix. */
+      .gui-host .lil-root { width: 100%; --width: 100%; }
+      .gui-host .lil-gui { --background-color: #202225; --title-background-color: #26282c;
+                           --focus-color: #3f6c8e; --hover-color: #34373c;
+                           --number-color: #7fd4ff; --string-color: #cfe6c4;
+                           --text-color: #d8d8d8; --title-text-color: #e6e6e6;
+                           --font-family: inherit; --font-size: 12px;
+                           --input-font-size: 12px; --name-width: 46%; }
+      .gui-host .dirty > .lil-name { color: #7fd4ff; font-weight: 600; }
       .note { margin: 2px 0 0; font-size: 11px; line-height: 1.35; }
       .hot { background: #3f6c8e; color: #fff; }
       .error { margin: 0; padding: 6px 8px; border-radius: 4px; font-size: 11px;
                background: #4a2326; border: 1px solid #7a3a3f; color: #f0c8c8; }
       code { background: #2b2d31; padding: 0 3px; border-radius: 3px; }
+      .stage-error { max-width: 460px; padding: 18px 20px; border-radius: 6px;
+                     background: #23252a; border: 1px solid #3a3d42; line-height: 1.5; }
+      .stage-error p { margin: 8px 0 0; }
       .report, .error { margin: 0; padding: 6px 8px; border-radius: 4px; font-size: 11px;
                         white-space: pre-wrap; max-height: 220px; overflow: auto;
                         font-family: inherit; }
@@ -52,7 +57,7 @@
     </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="root"></div>
     <script type="module" src="./main.jsx"></script>
   </body>
 </html>

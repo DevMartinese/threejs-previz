@@ -81,6 +81,33 @@ function saveTuning(tuning, scenes) {
   try { localStorage.setItem(STORE, JSON.stringify(out)); } catch { /* private mode */ }
 }
 
+/**
+ * A WebGL failure inside `<Canvas>` throws during render, and an unhandled
+ * throw unmounts the WHOLE React tree — the header, the playhead and the knob
+ * panel with it. The symptom is a blank page with nothing to read, which is
+ * the least useful thing a viewer can do when the machine it is running on
+ * cannot give it a context. Contained here, the stage reports itself and
+ * everything else keeps working.
+ */
+class StageBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div className="stage-error">
+        <b>the 3D view could not start</b>
+        <p>{String(this.state.err.message ?? this.state.err)}</p>
+        <p className="dim">
+          Usually WebGL: a headless or remote session, a browser with hardware
+          acceleration off, or a driver that refuses a context. The panel and
+          the shot list still work, and the audits never needed a GPU.
+        </p>
+      </div>
+    );
+  }
+}
+
 /** Committing on every slider pixel rebuilds the scene — CSG included — per
  *  event. A short trailing delay keeps the readout live and the rebuild rare. */
 function useDebounced(value, ms) {
@@ -193,6 +220,7 @@ function App() {
       </header>
 
       <div id="stage">
+        <StageBoundary>
         <Canvas
           style={{ width: '100%', height: '100%' }}
           camera={{ position: [def.subjectSize * 6, def.subjectSize * 4, def.subjectSize * 6], fov: 45,
@@ -204,6 +232,7 @@ function App() {
                             show={show} params={built.params} />
           )}
         </Canvas>
+        </StageBoundary>
       </div>
 
       {panel && (
@@ -232,4 +261,7 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('app')).render(<App />);
+// Mount into #root, not #app: App renders its own #app, and mounting into an
+// element with the same id nested two grids inside each other and put a
+// duplicate id in the document.
+createRoot(document.getElementById('root')).render(<App />);
