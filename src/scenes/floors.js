@@ -71,9 +71,15 @@ const pass = (t) => {
 
 /* ------------------------------------------------------------- the world -- */
 const SLABS = [4, 8, 12, 16, 20, 24];   // six, every 4 units
-const SLAB_T = 0.6;
+// The two slabs the pass begins and ends inside are THICKER than the four it
+// crosses on the way. Making the cut's flash the same length as every other
+// floor pass hid it too well: the world simply swapped with no punctuation,
+// which reads as a glitch rather than a transition. A deliberate ~0.5 s of
+// darkness at the boundary — twice any normal crossing — is the beat that
+// makes the change land.
+const SLAB_T = [1.4, 0.6, 0.6, 0.6, 0.6, 1.4];
 const HERO_H = 3.2;                     // fits the 12..16 storey with air
-const STOREYS = [4.3, 8.3, 12.3, 16.3, 20.3];   // every storey the pass crosses
+const STOREYS = [4.75, 8.3, 12.3, 16.3, 20.3];  // every storey the pass crosses
 // Six dressing spots per storey, spread across the frame and in depth so a
 // world reads at any height — including the hero's storey, where they flank
 // the block without crossing it (the occlusion audit checks that).
@@ -100,14 +106,19 @@ function build({ ctx, geo }) {
 
   ctx.part('ENV_ground', geo.box({ x: 40, y: 0.2, z: 40 }), 'ground', ctx.groups.ENV)
     .position.y = -0.1;
-  ctx.part('ENV_wall', geo.box({ x: 30, y: 34, z: 0.3 }), 'wall', ctx.groups.ENV)
-    .position.set(0, 15, -14);
+  // The wall sits BEYOND the slabs' own footprint (they span z -20..20).
+  // At -14 it was inside them, so a camera in a slab saw the wall through a
+  // slit at eye level and the "opaque" flash was a letterbox band. Behind
+  // -20 the horizontal ray hits the slab's own far face first: the frame
+  // goes properly dark.
+  ctx.part('ENV_wall', geo.box({ x: 44, y: 34, z: 0.3 }), 'wall', ctx.groups.ENV)
+    .position.set(0, 15, -22);
 
   // Six opaque slabs. DoubleSide is what makes the crossing a dark flash:
   // inside the slab, its interior renders and fills the frame.
   ctx.material('slab').side = DoubleSide;
   SLABS.forEach((y, i) => {
-    ctx.part(`ENV_slab_${i}`, geo.box({ x: 40, y: SLAB_T, z: 40 }), 'slab', ctx.groups.ENV)
+    ctx.part(`ENV_slab_${i}`, geo.box({ x: 40, y: SLAB_T[i], z: 40 }), 'slab', ctx.groups.ENV)
       .position.y = y;
   });
 
@@ -163,10 +174,10 @@ function build({ ctx, geo }) {
     });
     [2, 5].forEach((i, n) => {
       const [x, z] = P[i];
-      put('wh', `rkp${s}${n}a`, geo.box({ x: 0.14, y: 3.2, z: 0.14 }), 'rack', [x - 1.5, y + 1.6, z]);
-      put('wh', `rkp${s}${n}b`, geo.box({ x: 0.14, y: 3.2, z: 0.14 }), 'rack', [x + 1.5, y + 1.6, z]);
+      put('wh', `rkp${s}${n}a`, geo.box({ x: 0.14, y: 2.6, z: 0.14 }), 'rack', [x - 1.5, y + 1.3, z]);
+      put('wh', `rkp${s}${n}b`, geo.box({ x: 0.14, y: 2.6, z: 0.14 }), 'rack', [x + 1.5, y + 1.3, z]);
       put('wh', `rks${s}${n}a`, geo.box({ x: 3.2, y: 0.1, z: 1.0 }), 'rack', [x, y + 1.0, z]);
-      put('wh', `rks${s}${n}b`, geo.box({ x: 3.2, y: 0.1, z: 1.0 }), 'rack', [x, y + 2.2, z]);
+      put('wh', `rks${s}${n}b`, geo.box({ x: 3.2, y: 0.1, z: 1.0 }), 'rack', [x, y + 1.9, z]);
       put('wh', `rkc${s}${n}`, geo.box({ x: 0.9, y: 0.7, z: 0.8 }), 'crate', [x - 0.6, y + 1.4, z]);
     });
   });
