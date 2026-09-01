@@ -10,13 +10,17 @@ timing and framing — exactly the things a model cannot invent consistently.
 
 ## Blender, and the same thing in code
 
-The left column is a Blender blocking pass. The right is the same beats built
-with this tool — the cup split into three horizontal slices with the layer
-edges exposed, and the vertical cross-section that sweeps past camera — except
-that here every shot is checked before it renders, and the whole piece is a
-file you can diff.
+The left column is a Blender blocking pass; the right is the same piece built
+with this tool. Same four beats, read off both timelines at the same
+timestamps: the clones fanning out, the vertical cross-section, the pour into
+the glass, and the moka with its droplets frozen mid-air.
 
-![Blender reference beside the same beats built with threejs-previz](media/tiramisu-blender-vs-previz.png)
+The difference is not what you see — it is that on the right, every shot was
+measured before it rendered (is the hero in frame, is it *visible*, does the
+camera clear the geometry, does the path jump, does the pour still reach the
+glass), and the whole 30 seconds is one file you can diff.
+
+![The same four beats: a Blender blocking pass on the left, threejs-previz on the right](media/tiramisu-blender-vs-previz.png)
 
 ▶ [`media/tiramisu-blender-reference.mp4`](media/tiramisu-blender-reference.mp4) — the Blender pass
 ▶ [`media/tiramisu.mp4`](media/tiramisu.mp4) — 13 cuts, 720 frames, 2520×1080, this tool
