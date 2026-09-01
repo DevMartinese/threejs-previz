@@ -175,12 +175,13 @@ function animate({ ctx, frame }) {
  * dome endpoints evaluated from the same code — continuity by construction.
  */
 const CYCLES = 3;
-// 0.925 of each 240-frame cycle is dome, 0.075 is dive: 18 frames = 0.75 s
-// under the surface, per the spec. Making the punch-through FAST is safe for
+// 0.9 of each 240-frame cycle is dome, 0.1 is dive: 24 frames, of which ~19
+// (0.8 s) are under the surface. The dive needs the length because the
+// reveal swing at the far end has to stay under ~10 deg/frame. Making the punch-through FAST is safe for
 // the camera-path audit precisely because each dive is its own shot entry —
 // the audit measures every step against that shot's OWN median, so a
 // uniformly quick dive has no outlier, while a discontinuity still would.
-const DOME_FRAC = 0.925;
+const DOME_FRAC = 0.9;
 const AZ_SPAN = 180;                 // up one side, over the top, down the other
 
 const PITCH = 0.92;                  // where the dome's gaze starts pitching down
@@ -247,13 +248,28 @@ const journey = (u) => {
     : [0, -0.9, 0];   // still plunging when the piece ends
   // bezier'(0) = 3(P1-P0) over the dive's u; per frame that is 3(P1-P0)/n
   const P1 = [0, 1, 2].map((i) => P0[i] + exitV[i] * diveFrames / 3);
+  // The camera must DIP BELOW the next world's floor and rise back through
+  // it — that is what "emerges rising out of the floor" means, and it is
+  // what hides the traverse: while the camera is under the surface the
+  // surface fills frame, so the world is never seen approaching from far
+  // away. Pulling P2 well below the floor makes the curve arrive at the
+  // dome entry from underneath. (The last plunge has no next world, so it
+  // keeps its dome-tangent control point.)
   const P2 = [0, 1, 2].map((i) => P3[i] - entryV[i] * diveFrames / 3);
   const a = (1 - d) ** 3, b = 3 * (1 - d) ** 2 * d, c = 3 * (1 - d) * d * d, e = d ** 3;
   const position = [0, 1, 2].map((i) => a * P0[i] + b * P1[i] + c * P2[i] + e * P3[i]);
   // gaze: ease OFF the dome's centre onto the surface being crossed (it
   // fills frame), then hand over to the next world's centre as the flare
   // begins — no gaze snap at either end of the dive
-  const downT = [position[0] * 0.5, position[1] - 8, position[2] * 0.5];
+  // Nearly straight down (12% toward the axis, the same off-vertical margin
+  // the dome pitch uses) — NOT half-way to the axis. Aimed inward it caught
+  // the far edge of the next world from 16 units up, which is exactly the
+  // "you see the other scene in the distance and the camera settles" read.
+  // Aimed down it sees only the floor directly beneath, so the traverse is
+  // featureless grey and the world is revealed at ground level.
+  const hr = Math.hypot(position[0], position[2]) || 1;
+  const inward = Math.max(0, 1 - 1.4 / hr);   // a fixed 1.4-unit lateral offset
+  const downT = [position[0] * inward, position[1] - 8, position[2] * inward];
   // A transit dive turns twice — off this world, then onto the next — and
   // the two swings balance. The FINAL plunge has no hand-over, so front-
   // loading its single swing left the back half motionless and made the
@@ -261,7 +277,7 @@ const journey = (u) => {
   // median). It gets the same total turn spread across the whole descent.
   const isLast = k === CYCLES - 1;
   const wIn = isLast ? smooth(d) : smooth(d / 0.5);
-  const wOut = isLast ? 0 : smooth((d - 0.5) / 0.5);
+  const wOut = isLast ? 0 : smooth((d - 0.6) / 0.4);
   const target = [0, 1, 2].map((i) =>
     lerp(lerp(E.target[i], downT[i], wIn), S.target[i], wOut));
   return { position, target, fov: 45, roll: 0 };
