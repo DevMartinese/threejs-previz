@@ -102,7 +102,11 @@ function person(ctx, geo, name, colour, [x, y, z], ry, seated, height = 1.72) {
 
 function build({ ctx, geo }) {
   // ---- world 1: the car and its people, ground level
-  ctx.part('ENV_floor1', geo.disc({ radius: 15 }), 'grey', ctx.groups.ENV);
+    // Floors are 60 across, not 15: the dive crosses them ~10 units out from
+  // the centre, and a small disc shows its RIM there — you see a floating
+  // plate with the next world already visible underneath instead of a
+  // surface being punched through.
+  ctx.part('ENV_floor1', geo.disc({ radius: 60 }), 'grey', ctx.groups.ENV);
   buildCar(ctx, geo, { bodyId: 'crimson', cabinId: 'steel', wheelId: 'dark', prefix: 'PRP_car' });
   person(ctx, geo, 'red', 'red', [1.45, 0.74, 0.45], 25, true);      // on the hood
   person(ctx, geo, 'cyan', 'cyan', [-0.35, 0.78, 0.38], 90, true);   // riding high
@@ -112,7 +116,7 @@ function build({ ctx, geo }) {
 
   // ---- world 2: the court, 28 m long, mid-game, 18 below
   const y2 = WY[1];
-  ctx.part('ENV_floor2', geo.disc({ radius: 20 }), 'grey', ctx.groups.ENV)
+  ctx.part('ENV_floor2', geo.disc({ radius: 60 }), 'grey', ctx.groups.ENV)
     .position.y = y2;
   ctx.part('ENV_court', geo.box({ x: 28, y: 0.02, z: 15 }), 'greyDeep', ctx.groups.ENV)
     .position.y = y2 + 0.01;
@@ -135,7 +139,7 @@ function build({ ctx, geo }) {
 
   // ---- world 3: night drift around the artist, 36 below
   const y3 = WY[2];
-  ctx.part('ENV_floor3', geo.disc({ radius: 15 }), 'night', ctx.groups.ENV)
+  ctx.part('ENV_floor3', geo.disc({ radius: 60 }), 'night', ctx.groups.ENV)
     .position.y = y3;
   person(ctx, geo, 'artist', 'artist', ARTIST, 0, false, 1.78);
   buildCar(ctx, geo, { bodyId: 'nightcar', cabinId: 'nightsteel', wheelId: 'dark',
@@ -179,16 +183,27 @@ const CYCLES = 3;
 const DOME_FRAC = 0.925;
 const AZ_SPAN = 180;                 // up one side, over the top, down the other
 
+const PITCH = 0.92;                  // where the dome's gaze starts pitching down
+
 const domePose = (k, s) => {         // s: 0..1 along world k's dome
   const { r0, r1, ty, cx, cz } = DOME[k];
   const az = rad(k * AZ_SPAN + AZ_SPAN * s);
   const phi = rad(5 + 73 * Math.sin(Math.PI * s));
   const r = lerp(r0, r1, smooth(s)); // closes in as it rises
   const cy = WY[k];
+  const position = [cx + Math.sin(az) * Math.cos(phi) * r, cy + Math.sin(phi) * r,
+                    cz + Math.cos(az) * Math.cos(phi) * r];
+  // The dome ends 5 degrees above the floor — a metre off it. Pitching the
+  // gaze DOWN over the dome's last 8% is what makes the punch-through read:
+  // the surface fills frame while the camera is still above it, and only
+  // then does it cross. Swinging the look down after crossing (the first
+  // version) shows the floor edge-on and the next world already underneath.
+  const w = smooth((s - PITCH) / (1 - PITCH));
+  const down = [position[0], cy - 3, position[2]];
+  const centre = [cx, cy + ty, cz];
   return {
-    position: [cx + Math.sin(az) * Math.cos(phi) * r, cy + Math.sin(phi) * r,
-               cz + Math.cos(az) * Math.cos(phi) * r],
-    target: [cx, cy + ty, cz],
+    position,
+    target: [0, 1, 2].map((i) => lerp(centre[i], down[i], w)),
   };
 };
 
@@ -250,6 +265,7 @@ const journey = (u) => {
 const win = (a, b) => (u) => journey(a + (b - a) * u);
 const F = (fr) => Math.round(720 * fr);
 const C = 1 / CYCLES, DF = DOME_FRAC / CYCLES;
+const DH = DF * PITCH;               // the hero-enforced part of each dome
 
 /* ------------------------------------------------------------------ scene -- */
 export default defineScene({
@@ -265,28 +281,41 @@ export default defineScene({
   build,
   animate,
   shots: [
-    { name: 'DOME1_car', from: 0, to: F(DF), focalLength: DOME[0].focal,
+    { name: 'DOME1_car', from: 0, to: F(DH), focalLength: DOME[0].focal,
       easing: 'linear', hero: 'PRP_car_body',
       occlusion: { ignore: ['CHR_*', 'PRP_car_*'] },
-      move: win(0, DF) },
-    { name: 'DIVE1', from: F(DF), to: F(C), focalLength: DOME[0].focal,
+      move: win(0, DH) },
+    // The punch is two beats at different speeds, so it is two entries: the
+    // APPROACH (still above the floor, gaze pitching onto it) and the
+    // CROSSING (fast, through the surface). The hero is supposed to leave
+    // frame in both: the floor is the shot.
+    { name: 'APPROACH1', from: F(DH), to: F(DF), focalLength: DOME[0].focal,
+      easing: 'linear', hero: [], clearance: 0, joins: true,
+      move: win(DH, DF) },
+    { name: 'CROSS1', from: F(DF), to: F(C), focalLength: DOME[0].focal,
       easing: 'linear', hero: [], clearance: 0, joins: true,
       move: win(DF, C) },
-    { name: 'DOME2_court', from: F(C), to: F(C + DF), focalLength: DOME[1].focal,
+    { name: 'DOME2_court', from: F(C), to: F(C + DH), focalLength: DOME[1].focal,
       easing: 'linear',
       // explicit names: 'CHR_red*' would also match world 1's red — the
       // worlds share one scene, so globs must not leak across them
       hero: ['CHR_red1_*', 'CHR_red2_*', 'CHR_red3_*', 'CHR_cyan1_*', 'CHR_cyan2_*', 'PRP_ball'],
       occlusion: { ignore: ['CHR_*', 'PRP_hoop_*'] },
-      joins: true, move: win(C, C + DF) },
-    { name: 'DIVE2', from: F(C + DF), to: F(2 * C), focalLength: DOME[1].focal,
+      joins: true, move: win(C, C + DH) },
+    { name: 'APPROACH2', from: F(C + DH), to: F(C + DF), focalLength: DOME[1].focal,
+      easing: 'linear', hero: [], clearance: 0, joins: true,
+      move: win(C + DH, C + DF) },
+    { name: 'CROSS2', from: F(C + DF), to: F(2 * C), focalLength: DOME[1].focal,
       easing: 'linear', hero: [], clearance: 0, joins: true,
       move: win(C + DF, 2 * C) },
-    { name: 'DOME3_drift', from: F(2 * C), to: F(2 * C + DF), focalLength: DOME[2].focal,
+    { name: 'DOME3_drift', from: F(2 * C), to: F(2 * C + DH), focalLength: DOME[2].focal,
       easing: 'linear', hero: ['CHR_artist_torso', 'CHR_artist_head'],
       occlusion: { ignore: ['PRP_dcar_*', 'PRP_beam_*', 'CHR_artist_*'] },
-      joins: true, move: win(2 * C, 2 * C + DF) },
-    { name: 'DIVE3', from: F(2 * C + DF), to: 720, focalLength: DOME[2].focal,
+      joins: true, move: win(2 * C, 2 * C + DH) },
+    { name: 'APPROACH3', from: F(2 * C + DH), to: F(2 * C + DF), focalLength: DOME[2].focal,
+      easing: 'linear', hero: [], clearance: 0, joins: true,
+      move: win(2 * C + DH, 2 * C + DF) },
+    { name: 'CROSS3', from: F(2 * C + DF), to: 720, focalLength: DOME[2].focal,
       easing: 'linear', hero: [], clearance: 0, joins: true,
       move: win(2 * C + DF, 1) },
   ],
