@@ -199,7 +199,12 @@ const domePose = (k, s) => {         // s: 0..1 along world k's dome
   // then does it cross. Swinging the look down after crossing (the first
   // version) shows the floor edge-on and the next world already underneath.
   const w = smooth((s - PITCH) / (1 - PITCH));
-  const down = [position[0], cy - 3, position[2]];
+  // Aimed 12% of the way toward the dome's axis rather than straight down:
+  // a gaze exactly along the camera's own up axis is the lookAt singularity
+  // — the view direction stays smooth while the FRAME SPINS (a 150-degree
+  // up-vector flip in one frame, which the roll check now catches). This
+  // caps the pitch near 80 degrees, and a 60-wide floor still fills frame.
+  const down = [lerp(position[0], cx, 0.12), cy - 3.5, lerp(position[2], cz, 0.12)];
   const centre = [cx, cy + ty, cz];
   return {
     position,

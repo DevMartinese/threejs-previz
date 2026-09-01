@@ -253,8 +253,8 @@ teleports, and the classic cause is an orbit angle wrapping through `%`,
 from start to start+arc.
 
 The continuity sweep now watches the CAMERA too: every frame of every shot,
-position step and view-direction turn, flagged when a step exceeds 5x the
-shot's own median (with floors tuned so a real close fly-by — 1.35x median,
+position step, view-direction turn AND ROLL, flagged when a step exceeds 5x
+the shot's own median (with floors tuned so a real close fly-by — 1.35x median,
 a smooth 12deg/frame whip — never flags, and a half-turn wrap always does):
 `camera jump 7.998m/160.0deg@f72` names the frame and the size. Steps ACROSS
 shot boundaries are informational — a hard cut is supposed to jump — unless
@@ -262,6 +262,16 @@ the shot declares `joins: true` (entries playing slices of one continuous
 move), in which case the splice is enforced: within 3x the median step and
 10 degrees. Never smooth, clamp or lerp across a flagged jump: that hides
 the discontinuity; fix the path.
+
+**Roll is measured for a reason the other two miss.** Aim a camera exactly
+along its own up axis — straight down at a floor, straight up at a ceiling —
+and `lookAt` is degenerate: the position and the view direction stay
+perfectly smooth while the FRAME SPINS. A real case: a dome camera pitching
+onto the floor it was about to punch through reached exactly 90 degrees and
+the up vector flipped 178 degrees in one frame — the image turned over for
+two frames at the transition, and both the position and direction checks
+said fine. Keep a steep gaze a few degrees off vertical (aim slightly toward
+the axis rather than straight down) and the singularity never arises.
 
 ### Anchors and attachments — connections are derived, then measured
 
