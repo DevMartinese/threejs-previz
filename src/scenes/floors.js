@@ -25,15 +25,27 @@ const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
 const smooth = (t) => { const c = clamp01(t); return c * c * (3 - 2 * c); };
 
 /* ------------------------------------------------------------- the move -- */
-const Y0 = 1, TRAVEL = 26;              // 1 -> 27, through six slabs
+// The pass STARTS AND ENDS INSIDE A SLAB (4 -> 24, both slab centres), so
+// each take opens and closes on darkness and the hard cut lands inside that
+// flash — the world changes while the frame is black.
+const Y0 = 4, TRAVEL = 20;
 const LOOK = 10;                        // how far ahead the fixed gaze sits
 
-/** Speed as a fraction of full speed. Symmetric about the midpoint. */
+/**
+ * Speed as a fraction of full speed, symmetric about the midpoint.
+ *
+ * It holds FULL speed at both ends rather than ramping from and to zero.
+ * Ramping to zero made the camera stop dead before every cut and crawl back
+ * up afterwards (measured: 0.0010 per frame at the last frame of a take,
+ * 0.5% of full speed) — the takes read as coarse and slow to change. The
+ * acceleration the move needs is the one OUT of the mid-pass slowdown; the
+ * ends carry momentum straight through the cut.
+ */
 const SPEED = (t) => {
-  if (t < 0.15) return smooth(t / 0.15);                       // accelerate in
+  if (t <= 0.15) return 1;                                      // enter at speed
   if (t < 0.5) return lerp(1, 0.15, smooth((t - 0.15) / 0.35)); // slow to 15%
   if (t < 0.85) return lerp(0.15, 1, smooth((t - 0.5) / 0.35)); // back to full
-  return lerp(1, 0, smooth((t - 0.85) / 0.15));                 // decelerate out
+  return 1;                                                     // leave at speed
 };
 
 /** Position is the normalised integral of SPEED — trapezoid, 4000 steps. */
@@ -59,9 +71,9 @@ const pass = (t) => {
 
 /* ------------------------------------------------------------- the world -- */
 const SLABS = [4, 8, 12, 16, 20, 24];   // six, every 4 units
-const SLAB_T = 0.4;
-const HERO_H = 3.4;                     // fits the 12..16 storey with air
-const STOREYS = [0, 4.2, 8.2, 12.2, 16.2, 20.2, 24.2];
+const SLAB_T = 0.6;
+const HERO_H = 3.2;                     // fits the 12..16 storey with air
+const STOREYS = [4.3, 8.3, 12.3, 16.3, 20.3];   // every storey the pass crosses
 // Six dressing spots per storey, spread across the frame and in depth so a
 // world reads at any height — including the hero's storey, where they flank
 // the block without crossing it (the occlusion audit checks that).
